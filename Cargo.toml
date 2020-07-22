@@ -1,0 +1,16 @@
+[package]
+name = "spa-server"
+version = "0.1.0"
+authors = ["JustinRlle <justinrlle@pm.me>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rouille = "3.0.0"
+anyhow = "1.0.31"
+mime_guess = "2.0.3"
+toml = "0.5.6"
+serde = { version = "1.0.114", features = ["derive"] }
+isahc = "0.9.6"
+shellexpand = "2.0.0"
