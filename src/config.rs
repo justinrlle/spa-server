@@ -1,4 +1,4 @@
-use std::{ffi::OsString, fmt, fs, collections::HashMap};
+use std::{collections::HashMap, ffi::OsString, fmt, fs};
 
 use anyhow::{Context, Result};
 use rouille::url;
@@ -38,7 +38,6 @@ pub struct Config {
     pub proxies: HashMap<String, ProxyTarget>,
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct ServerConfig {
     pub folder: String,
@@ -68,15 +67,9 @@ pub struct ProxyConfig {
     pub headers: HashMap<String, String>,
 }
 
-
-
 impl ProxyConfig {
     pub fn new(path: &str, proxy: &ProxyTarget) -> Result<Self> {
-        anyhow::ensure!(
-            path.starts_with('/'),
-            "path `{}` is not a valid path",
-            path
-        );
+        anyhow::ensure!(path.starts_with('/'), "path `{}` is not a valid path", path);
         let mut path = path.to_owned();
         if !path.ends_with('/') {
             path += "/";
@@ -87,7 +80,11 @@ impl ProxyConfig {
         let secure = proxy.secure;
         let headers = proxy.headers.clone();
         Ok(Self {
-            path, target, path_rewrite, secure, headers
+            path,
+            target,
+            path_rewrite,
+            secure,
+            headers,
         })
     }
 }

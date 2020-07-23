@@ -39,7 +39,8 @@ impl ArchiveFormat {
             return Some(ArchiveFormat::TarLzma);
         } else if file_name.ends_with(".tar.7z")
             || file_name.ends_with(".tar.7z.001")
-            || file_name.ends_with(".t7z") {
+            || file_name.ends_with(".t7z")
+        {
             return Some(ArchiveFormat::Tar7z);
         } else if file_name.ends_with(".tar.zst") {
             return Some(ArchiveFormat::TarZstd);
@@ -74,33 +75,83 @@ impl ArchiveFormat {
 mod test {
     use super::*;
 
-
     #[test]
     fn parses_correctly() {
-        assert_eq!(ArchiveFormat::detect("file.tar.z"), Some(ArchiveFormat::TarZ));
-        assert_eq!(ArchiveFormat::detect("file.tar.gz"), Some(ArchiveFormat::TarGzip));
-        assert_eq!(ArchiveFormat::detect("file.tgz"), Some(ArchiveFormat::TarGzip));
-        assert_eq!(ArchiveFormat::detect("file.tar.bz2"), Some(ArchiveFormat::TarBzip2));
-        assert_eq!(ArchiveFormat::detect("file.tbz2"), Some(ArchiveFormat::TarBzip2));
-        assert_eq!(ArchiveFormat::detect("file.tar.lz"), Some(ArchiveFormat::TarLz));
-        assert_eq!(ArchiveFormat::detect("file.tar.xz"), Some(ArchiveFormat::TarXz));
-        assert_eq!(ArchiveFormat::detect("file.txz"), Some(ArchiveFormat::TarXz));
-        assert_eq!(ArchiveFormat::detect("file.tar.lzma"), Some(ArchiveFormat::TarLzma));
-        assert_eq!(ArchiveFormat::detect("file.tlz"), Some(ArchiveFormat::TarLzma));
-        assert_eq!(ArchiveFormat::detect("file.tar.7z"), Some(ArchiveFormat::Tar7z));
-        assert_eq!(ArchiveFormat::detect("file.tar.7z.001"), Some(ArchiveFormat::Tar7z));
-        assert_eq!(ArchiveFormat::detect("file.t7z"), Some(ArchiveFormat::Tar7z));
-        assert_eq!(ArchiveFormat::detect("file.tar.zst"), Some(ArchiveFormat::TarZstd));
+        assert_eq!(
+            ArchiveFormat::detect("file.tar.z"),
+            Some(ArchiveFormat::TarZ)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.tar.gz"),
+            Some(ArchiveFormat::TarGzip)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.tgz"),
+            Some(ArchiveFormat::TarGzip)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.tar.bz2"),
+            Some(ArchiveFormat::TarBzip2)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.tbz2"),
+            Some(ArchiveFormat::TarBzip2)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.tar.lz"),
+            Some(ArchiveFormat::TarLz)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.tar.xz"),
+            Some(ArchiveFormat::TarXz)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.txz"),
+            Some(ArchiveFormat::TarXz)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.tar.lzma"),
+            Some(ArchiveFormat::TarLzma)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.tlz"),
+            Some(ArchiveFormat::TarLzma)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.tar.7z"),
+            Some(ArchiveFormat::Tar7z)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.tar.7z.001"),
+            Some(ArchiveFormat::Tar7z)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.t7z"),
+            Some(ArchiveFormat::Tar7z)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.tar.zst"),
+            Some(ArchiveFormat::TarZstd)
+        );
         assert_eq!(ArchiveFormat::detect("file.tar"), Some(ArchiveFormat::Tar));
         assert_eq!(ArchiveFormat::detect("file.z"), Some(ArchiveFormat::Z));
         assert_eq!(ArchiveFormat::detect("file.zip"), Some(ArchiveFormat::Zip));
         assert_eq!(ArchiveFormat::detect("file.gz"), Some(ArchiveFormat::Gzip));
-        assert_eq!(ArchiveFormat::detect("file.bz2"), Some(ArchiveFormat::Bzip2));
+        assert_eq!(
+            ArchiveFormat::detect("file.bz2"),
+            Some(ArchiveFormat::Bzip2)
+        );
         assert_eq!(ArchiveFormat::detect("file.lz"), Some(ArchiveFormat::Lz));
         assert_eq!(ArchiveFormat::detect("file.xz"), Some(ArchiveFormat::Xz));
-        assert_eq!(ArchiveFormat::detect("file.lzma"), Some(ArchiveFormat::Lzma));
+        assert_eq!(
+            ArchiveFormat::detect("file.lzma"),
+            Some(ArchiveFormat::Lzma)
+        );
         assert_eq!(ArchiveFormat::detect("file.7z"), Some(ArchiveFormat::P7z));
-        assert_eq!(ArchiveFormat::detect("file.7z.001"), Some(ArchiveFormat::P7z));
+        assert_eq!(
+            ArchiveFormat::detect("file.7z.001"),
+            Some(ArchiveFormat::P7z)
+        );
         assert_eq!(ArchiveFormat::detect("file.rar"), Some(ArchiveFormat::Rar));
         assert_eq!(ArchiveFormat::detect("file.zst"), Some(ArchiveFormat::Zstd));
     }
@@ -129,13 +180,31 @@ mod test {
     #[test]
     fn does_not_detect_tar_if_malformed() {
         assert_eq!(ArchiveFormat::detect("filetar.z"), Some(ArchiveFormat::Z));
-        assert_eq!(ArchiveFormat::detect("filetar.gz"), Some(ArchiveFormat::Gzip));
-        assert_eq!(ArchiveFormat::detect("filetar.bz2"), Some(ArchiveFormat::Bzip2));
+        assert_eq!(
+            ArchiveFormat::detect("filetar.gz"),
+            Some(ArchiveFormat::Gzip)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("filetar.bz2"),
+            Some(ArchiveFormat::Bzip2)
+        );
         assert_eq!(ArchiveFormat::detect("filetar.lz"), Some(ArchiveFormat::Lz));
         assert_eq!(ArchiveFormat::detect("filetar.xz"), Some(ArchiveFormat::Xz));
-        assert_eq!(ArchiveFormat::detect("filetar.lzma"), Some(ArchiveFormat::Lzma));
-        assert_eq!(ArchiveFormat::detect("filetar.7z"), Some(ArchiveFormat::P7z));
-        assert_eq!(ArchiveFormat::detect("filetar.7z.001"), Some(ArchiveFormat::P7z));
-        assert_eq!(ArchiveFormat::detect("filetar.zst"), Some(ArchiveFormat::Zstd));
+        assert_eq!(
+            ArchiveFormat::detect("filetar.lzma"),
+            Some(ArchiveFormat::Lzma)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("filetar.7z"),
+            Some(ArchiveFormat::P7z)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("filetar.7z.001"),
+            Some(ArchiveFormat::P7z)
+        );
+        assert_eq!(
+            ArchiveFormat::detect("filetar.zst"),
+            Some(ArchiveFormat::Zstd)
+        );
     }
 }

@@ -1,9 +1,9 @@
 mod archive;
 mod config;
 
-use std::{borrow::Cow, env, fs, io::Read as _, path, sync::Arc, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, env, fs, io::Read as _, path, sync::Arc};
 
-use config::{ConfigPath, ProxyTarget, ProxyConfig};
+use config::{ConfigPath, ProxyConfig, ProxyTarget};
 
 use anyhow::{Context, Result};
 use mime_guess::mime;
@@ -60,7 +60,12 @@ impl Server {
             .iter()
             .map(|(key, val)| ProxyConfig::new(key, val))
             .collect::<Result<_>>()?;
-        Ok(Self { folder, index, http_client, proxies })
+        Ok(Self {
+            folder,
+            index,
+            http_client,
+            proxies,
+        })
     }
     fn serve_request(&self, request: &rouille::Request) -> Result<Response> {
         for proxy in self.proxies.iter() {
