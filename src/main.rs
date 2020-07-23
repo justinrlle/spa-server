@@ -1,7 +1,14 @@
 mod archive;
 mod config;
 
-use std::{borrow::Cow, collections::HashMap, env, fs, io::Read as _, path, sync::Arc};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    env, fs,
+    io::{self, Read as _},
+    path,
+    sync::Arc,
+};
 
 use config::{ConfigPath, ProxyConfig, ProxyTarget};
 
@@ -25,17 +32,11 @@ fn main() -> Result<()> {
         config.server.host, config.server.port
     );
 
-    rouille::start_server_with_pool(
-        (config.server.host.as_ref(), config.server.port),
-        None,
-        move |request| match server.clone().serve_request(request) {
-            Ok(res) => res,
-            Err(err) => {
-                println!("ERROR when handling {}: {}", request.url(), err);
-                Response::empty_404()
-            }
-        },
-    );
+    let addr = (config.server.host.as_ref(), config.server.port);
+
+    rouille::start_server_with_pool(addr, None, move |request| {
+        rouille::log(request, io::stdout(), || server.serve_request(request))
+    });
 }
 
 struct Server {
@@ -67,7 +68,10 @@ impl Server {
             proxies,
         })
     }
-    fn serve_request(&self, request: &rouille::Request) -> Result<Response> {
+    fn serve_request(self: &Arc<Self>, request: &rouille::Request) -> Response {
+        self.clone().inner_serve(request).expect("server error")
+    }
+    fn inner_serve(&self, request: &rouille::Request) -> Result<Response> {
         for proxy in self.proxies.iter() {
             if request.raw_url().starts_with(&proxy.path) {
                 let req = rouille_to_isahc(request, proxy.target.as_ref());
@@ -89,24 +93,15 @@ impl Server {
         let mime = mime_guess::from_path(path)
             .first()
             .unwrap_or(mime::APPLICATION_OCTET_STREAM);
-        println!("<-- {} as {}", path.display(), mime);
         serve_file(&self.folder.join(path), mime)
     }
 }
 
 fn serve_file(file_path: &path::PathBuf, mime: mime::Mime) -> Response {
     let mime = Cow::Owned(mime.as_ref().to_owned());
-    match fs::File::open(file_path).map(|f| Response::from_file(mime, f)) {
-        Ok(res) => res,
-        Err(err) => {
-            println!(
-                "ERROR: failed to open file at path {} with mime {}",
-                file_path.display(),
-                err
-            );
-            Response::empty_404()
-        }
-    }
+    fs::File::open(file_path)
+        .map(|f| Response::from_file(mime, f))
+        .unwrap_or_else(|_| Response::empty_404())
 }
 
 fn wants_html(request: &rouille::Request) -> bool {
