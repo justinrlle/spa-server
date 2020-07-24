@@ -1,7 +1,6 @@
 use std::{collections::HashMap, ffi::OsString, fmt, fs};
 
 use anyhow::{Context, Result};
-use rouille::url;
 use serde::Deserialize;
 
 pub enum ConfigPath {
@@ -56,37 +55,6 @@ pub struct ProxyTarget {
     pub secure: bool,
     #[serde(default)]
     pub headers: HashMap<String, String>,
-}
-
-#[derive(Debug)]
-pub struct ProxyConfig {
-    pub path: String,
-    pub target: String,
-    pub path_rewrite: Option<(String, String)>,
-    pub secure: bool,
-    pub headers: HashMap<String, String>,
-}
-
-impl ProxyConfig {
-    pub fn new(path: &str, proxy: &ProxyTarget) -> Result<Self> {
-        anyhow::ensure!(path.starts_with('/'), "path `{}` is not a valid path", path);
-        let mut path = path.to_owned();
-        if !path.ends_with('/') {
-            path += "/";
-        }
-        url::Url::parse(&proxy.target).context("invalid target")?;
-        let target = proxy.target.clone();
-        let path_rewrite = proxy.path_rewrite.clone();
-        let secure = proxy.secure;
-        let headers = proxy.headers.clone();
-        Ok(Self {
-            path,
-            target,
-            path_rewrite,
-            secure,
-            headers,
-        })
-    }
 }
 
 fn default_port() -> u16 {
