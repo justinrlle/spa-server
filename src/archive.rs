@@ -1,15 +1,16 @@
 use std::{
-    path::{PathBuf, Path, Component},
+    ffi::{OsStr, OsString},
     fmt,
-    ffi::{OsString, OsStr},
+    path::{Component, Path, PathBuf},
+    process::{Command, Stdio},
 };
 
-use anyhow::{Result};
+use anyhow::{Context, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArchiveFormat {
     extension_length: usize,
-    kind: ArchiveFormatKind,
+    pub kind: ArchiveFormatKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,7 +70,10 @@ pub fn detect(file_name: &str) -> Option<ArchiveFormat> {
 
 impl ArchiveFormat {
     fn new(extension_length: usize, kind: ArchiveFormatKind) -> Self {
-        Self { extension_length, kind }
+        Self {
+            extension_length,
+            kind,
+        }
     }
     pub fn detect(file_name: &str) -> Option<Self> {
         use ArchiveFormatKind::*;
@@ -83,7 +87,7 @@ impl ArchiveFormat {
             Some(ArchiveFormat::new(4, TarGzip))
         } else if file_name.ends_with(".tar.bz2") {
             Some(ArchiveFormat::new(8, TarBzip2))
-        } else if  file_name.ends_with(".tbz2") {
+        } else if file_name.ends_with(".tbz2") {
             Some(ArchiveFormat::new(5, TarBzip2))
         } else if file_name.ends_with(".tar.lz") {
             Some(ArchiveFormat::new(7, TarLz))
@@ -146,42 +150,63 @@ impl ArchiveFormat {
     }
 }
 
-pub fn extract(path: &str, archive: ArchiveFormat, cache_folder: &Path) -> Result<PathBuf> {
-    anyhow::ensure!(archive.is_tar(), "archive format not supported: {}", archive);
+pub fn extract_path(path: &str, archive: ArchiveFormat, cache_folder: &Path) -> Result<PathBuf> {
+    anyhow::ensure!(
+        archive.is_tar(),
+        "archive format not supported: {}",
+        archive
+    );
     let file_name = &path[..path.len() - archive.extension_length];
     let file_name = PathBuf::from(file_name)
         .file_name()
         .ok_or_else(|| anyhow::anyhow!("there is no file_name in archive path"))?
         .to_owned();
-    println!("DEBUG: file_name: {:?}", &file_name);
+    // println!("DEBUG: file_name: {:?}", &file_name);
     let encoded_path = PathBuf::from(path);
-    println!("DEBUG: encoded_path (before): {}", encoded_path.display());
-    println!("DEBUG: encoded_path.parent(): {:?}", encoded_path.parent());
-    let encoded_path = encoded_path.parent()
+    // println!("DEBUG: encoded_path (before): {}", encoded_path.display());
+    // println!("DEBUG: encoded_path.parent(): {:?}", encoded_path.parent());
+    let encoded_path = encoded_path
+        .parent()
         .map(|parent| {
             if parent.as_os_str() == OsStr::new("") {
                 return PathBuf::from(&file_name);
             }
-            println!("DEBUG: parent: {}", parent.display());
-            let mut parent = parent
-                .components()
-                .fold(OsString::new(), |mut p, c| {
-                    match c {
-                        Component::Normal(c) => {
-                            p.push(c);
-                            p.push("_");
-                        },
-                        _ => {}
-                    }
-                    p
-                });
+            // println!("DEBUG: parent: {}", parent.display());
+            let mut parent = parent.components().fold(OsString::new(), |mut p, c| {
+                if let Component::Normal(c) = c {
+                    p.push(c);
+                    p.push("_");
+                }
+                p
+            });
             parent.push(&file_name);
             PathBuf::from(parent)
         })
-    .unwrap_or_else(|| PathBuf::from(&file_name));
-    println!("DEBUG: encoded_path: {}", encoded_path.display());
+        .unwrap_or_else(|| PathBuf::from(&file_name));
+    // println!("DEBUG: encoded_path: {}", encoded_path.display());
 
     Ok(cache_folder.join(encoded_path))
+}
+
+pub fn extract(path: &str, archive: ArchiveFormat, extract_path: &Path) -> Result<()> {
+    assert!(archive.is_tar(), "only tar archives are supported");
+    let status = Command::new("tar")
+        .arg("xf")
+        .arg(path)
+        .arg("-C")
+        .arg(extract_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .context("failed to run tar command, is tar installed?")?;
+    anyhow::ensure!(
+        status.success(),
+        "tar command failed to run: `tar xf '{}' -C '{}'",
+        path,
+        extract_path.display()
+    );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -247,27 +272,54 @@ mod test {
             ArchiveFormat::detect("file.tar.zst"),
             Some(ArchiveFormat::new(8, TarZstd))
         );
-        assert_eq!(ArchiveFormat::detect("file.tar"), Some(ArchiveFormat::new(4, Tar)));
-        assert_eq!(ArchiveFormat::detect("file.z"), Some(ArchiveFormat::new(2, Z)));
-        assert_eq!(ArchiveFormat::detect("file.zip"), Some(ArchiveFormat::new(4, Zip)));
-        assert_eq!(ArchiveFormat::detect("file.gz"), Some(ArchiveFormat::new(3, Gzip)));
+        assert_eq!(
+            ArchiveFormat::detect("file.tar"),
+            Some(ArchiveFormat::new(4, Tar))
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.z"),
+            Some(ArchiveFormat::new(2, Z))
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.zip"),
+            Some(ArchiveFormat::new(4, Zip))
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.gz"),
+            Some(ArchiveFormat::new(3, Gzip))
+        );
         assert_eq!(
             ArchiveFormat::detect("file.bz2"),
             Some(ArchiveFormat::new(4, Bzip2))
         );
-        assert_eq!(ArchiveFormat::detect("file.lz"), Some(ArchiveFormat::new(3, Lz)));
-        assert_eq!(ArchiveFormat::detect("file.xz"), Some(ArchiveFormat::new(3, Xz)));
+        assert_eq!(
+            ArchiveFormat::detect("file.lz"),
+            Some(ArchiveFormat::new(3, Lz))
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.xz"),
+            Some(ArchiveFormat::new(3, Xz))
+        );
         assert_eq!(
             ArchiveFormat::detect("file.lzma"),
             Some(ArchiveFormat::new(5, Lzma))
         );
-        assert_eq!(ArchiveFormat::detect("file.7z"), Some(ArchiveFormat::new(3, P7z)));
+        assert_eq!(
+            ArchiveFormat::detect("file.7z"),
+            Some(ArchiveFormat::new(3, P7z))
+        );
         assert_eq!(
             ArchiveFormat::detect("file.7z.001"),
             Some(ArchiveFormat::new(7, P7z))
         );
-        assert_eq!(ArchiveFormat::detect("file.rar"), Some(ArchiveFormat::new(4, Rar)));
-        assert_eq!(ArchiveFormat::detect("file.zst"), Some(ArchiveFormat::new(4, Zstd)));
+        assert_eq!(
+            ArchiveFormat::detect("file.rar"),
+            Some(ArchiveFormat::new(4, Rar))
+        );
+        assert_eq!(
+            ArchiveFormat::detect("file.zst"),
+            Some(ArchiveFormat::new(4, Zstd))
+        );
     }
 
     #[test]
@@ -293,7 +345,10 @@ mod test {
 
     #[test]
     fn does_not_detect_tar_if_malformed() {
-        assert_eq!(ArchiveFormat::detect("filetar.z"), Some(ArchiveFormat::new(2, Z)));
+        assert_eq!(
+            ArchiveFormat::detect("filetar.z"),
+            Some(ArchiveFormat::new(2, Z))
+        );
         assert_eq!(
             ArchiveFormat::detect("filetar.gz"),
             Some(ArchiveFormat::new(3, Gzip))
@@ -302,8 +357,14 @@ mod test {
             ArchiveFormat::detect("filetar.bz2"),
             Some(ArchiveFormat::new(4, Bzip2))
         );
-        assert_eq!(ArchiveFormat::detect("filetar.lz"), Some(ArchiveFormat::new(3, Lz)));
-        assert_eq!(ArchiveFormat::detect("filetar.xz"), Some(ArchiveFormat::new(3, Xz)));
+        assert_eq!(
+            ArchiveFormat::detect("filetar.lz"),
+            Some(ArchiveFormat::new(3, Lz))
+        );
+        assert_eq!(
+            ArchiveFormat::detect("filetar.xz"),
+            Some(ArchiveFormat::new(3, Xz))
+        );
         assert_eq!(
             ArchiveFormat::detect("filetar.lzma"),
             Some(ArchiveFormat::new(5, Lzma))
@@ -321,28 +382,67 @@ mod test {
             Some(ArchiveFormat::new(4, Zstd))
         );
     }
-    fn wrap_extract(path: &str, cache_path: &Path) -> Result<PathBuf> { extract(path, ArchiveFormat::detect(path).unwrap(), cache_path) }
+    fn wrap_extract_path(path: &str, cache_path: &Path) -> Result<PathBuf> {
+        extract_path(
+            path,
+            ArchiveFormat::detect(path).expect("archive detection"),
+            cache_path,
+        )
+    }
 
     #[cfg(unix)]
     #[test]
-    fn unix_extract() {
-        let cache_path = PathBuf::from("foo/bar");
-        assert_eq!(wrap_extract("foo.tar.gz", cache_path.as_ref()).unwrap(), Path::new("foo/bar/foo"));
-        assert_eq!(wrap_extract("src/foo.tar.gz", cache_path.as_ref()).unwrap(), Path::new("foo/bar/src_foo"));
-        assert_eq!(wrap_extract("/usr/local/foo.tar.gz", cache_path.as_ref()).unwrap(), Path::new("foo/bar/usr_local_foo"));
-        assert_eq!(wrap_extract("/etc/foo.tar.gz", cache_path.as_ref()).unwrap(), Path::new("foo/bar/etc_foo"));
-        assert_eq!(wrap_extract("dist/front/out/foo.tar.gz", cache_path.as_ref()).unwrap(), Path::new("foo/bar/dist_front_out_foo"));
+    fn unix_extract_path() {
+        let cache_path = Path::new("foo/bar");
+        assert_eq!(
+            wrap_extract_path("foo.tar.gz", cache_path).unwrap(),
+            Path::new("foo/bar/foo")
+        );
+        assert_eq!(
+            wrap_extract_path("src/foo.tar.gz", cache_path).unwrap(),
+            Path::new("foo/bar/src_foo")
+        );
+        assert_eq!(
+            wrap_extract_path("/usr/local/foo.tar.gz", cache_path).unwrap(),
+            Path::new("foo/bar/usr_local_foo")
+        );
+        assert_eq!(
+            wrap_extract_path("/etc/foo.tar.gz", cache_path).unwrap(),
+            Path::new("foo/bar/etc_foo")
+        );
+        assert_eq!(
+            wrap_extract_path("dist/front/out/foo.tar.gz", cache_path).unwrap(),
+            Path::new("foo/bar/dist_front_out_foo")
+        );
+        assert_eq!(
+            wrap_extract_path("./dist/foo.tar.xz", cache_path).unwrap(),
+            wrap_extract_path("dist/foo.tar.xz", cache_path).unwrap()
+        );
     }
 
     #[cfg(windows)]
     #[test]
-    fn windows_extract() {
+    fn windows_extract_path() {
         let cache_path = PathBuf::from(r"foo\bar");
-        assert_eq!(wrap_extract(r"foo.tar.gz", cache_path.as_ref()).unwrap(), Path::new(r"foo\bar\foo"));
-        assert_eq!(wrap_extract(r"src\foo.tar.gz", cache_path.as_ref()).unwrap(), Path::new(r"foo\bar\src_foo"));
-        assert_eq!(wrap_extract(r"\Programs\Bar\foo.tar.gz", cache_path.as_ref()).unwrap(), Path::new(r"foo\bar\Programs_Bar_foo"));
-        assert_eq!(wrap_extract(r"\Projects\foo.tar.gz", cache_path.as_ref()).unwrap(), Path::new(r"foo\bar\Projects_foo"));
-        assert_eq!(wrap_extract(r"dist\front\out\foo.tar.gz", cache_path.as_ref()).unwrap(), Path::new(r"foo\bar\dist_front_out_foo"));
-
+        assert_eq!(
+            wrap_extract_path(r"foo.tar.gz", cache_path.as_ref()).unwrap(),
+            Path::new(r"foo\bar\foo")
+        );
+        assert_eq!(
+            wrap_extract_path(r"src\foo.tar.gz", cache_path.as_ref()).unwrap(),
+            Path::new(r"foo\bar\src_foo")
+        );
+        assert_eq!(
+            wrap_extract_path(r"\Programs\Bar\foo.tar.gz", cache_path.as_ref()).unwrap(),
+            Path::new(r"foo\bar\Programs_Bar_foo")
+        );
+        assert_eq!(
+            wrap_extract_path(r"\Projects\foo.tar.gz", cache_path.as_ref()).unwrap(),
+            Path::new(r"foo\bar\Projects_foo")
+        );
+        assert_eq!(
+            wrap_extract_path(r"dist\front\out\foo.tar.gz", cache_path.as_ref()).unwrap(),
+            Path::new(r"foo\bar\dist_front_out_foo")
+        );
     }
 }

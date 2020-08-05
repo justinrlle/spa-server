@@ -1,14 +1,12 @@
 use std::{borrow::Cow, collections::HashMap, fs, io::Read as _, path, sync::Arc};
 
-use crate::{
-    config::ProxyTarget,
-    archive,
-};
+use crate::config::ProxyTarget;
 
 use anyhow::{Context, Result};
 use isahc::http;
 use mime_guess::mime;
 use rouille::url;
+use std::path::PathBuf;
 
 pub struct Server {
     pub folder: path::PathBuf,
@@ -49,16 +47,7 @@ impl ProxyConfig {
 }
 
 impl Server {
-    pub fn new(folder: &str, proxies: &HashMap<String, ProxyTarget>) -> Result<Arc<Self>> {
-        let folder = shellexpand::tilde(folder);
-        if let Some(archive) = archive::detect(folder.as_ref()) {
-            println!("trying to serve from an archive");
-            if archive.is_tar() {
-                println!("archive can be extracted from tar");
-            }
-            anyhow::bail!("serving from an archive is not yet supported");
-        }
-        let folder = path::PathBuf::from(folder.as_ref());
+    pub fn new(folder: PathBuf, proxies: &HashMap<String, ProxyTarget>) -> Result<Arc<Self>> {
         let metadata = fs::metadata(&folder)
             .with_context(|| format!("folder `{}` not found", folder.display()))?;
         anyhow::ensure!(metadata.is_dir(), "`{}` is not a folder", folder.display());

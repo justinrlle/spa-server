@@ -40,6 +40,8 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 pub struct ServerConfig {
     pub folder: String,
+    #[serde(default)]
+    pub base_path: Option<String>,
     #[serde(default = "default_port")]
     pub port: u16,
     #[serde(default = "default_host")]
