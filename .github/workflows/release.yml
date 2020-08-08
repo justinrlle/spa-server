@@ -1,0 +1,88 @@
+on:
+  push:
+    tags: ['v*']
+
+name: Release
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+      - if: matrix.os != 'windows-latest'
+        run: |
+          mkdir dist
+          cp target/release/spa-server 'dist/spa-server-${{ matrix.os }}'
+      - if: matrix.os == 'windows-latest'
+        run: |
+          mkdir dist
+          cp target/release/spa-server.exe "dist/spa-server-${{ matrix.os }}.exe"
+      - uses: actions/upload-artifact@v1
+        with:
+          name: dist-${{ matrix.os }}
+          path: dist
+
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v1
+        with:
+          name: dist-macos-latest
+          path: dist
+      - uses: actions/download-artifact@v1
+        with:
+          name: dist-ubuntu-latest
+          path: dist
+      - uses: actions/download-artifact@v1
+        with:
+          name: dist-windows-latest
+          path: dist
+      - uses: actions/create-release@v1
+        id: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+      - uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/spa-server-windows-latest.exe
+          asset_name: spa-server-windows.exe
+          asset_content_type: application/octet-stream
+      - uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/spa-server-ubuntu-latest
+          asset_name: spa-server-linux
+          asset_content_type: application/octet-stream
+      - uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/spa-server-macos-latest
+          asset_name: spa-server-macos
+          asset_content_type: application/octet-stream
