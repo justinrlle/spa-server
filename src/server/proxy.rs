@@ -1,7 +1,6 @@
 use crate::config::ProxyTarget;
 use anyhow::{Context, Result};
-use isahc::http;
-use rouille::url;
+use isahc::{http, HttpClient};
 use std::{borrow::Cow, collections::HashMap, io::Read as _};
 
 #[derive(Debug)]
@@ -20,7 +19,7 @@ impl ProxyConfig {
         if !path.ends_with('/') {
             path += "/";
         }
-        url::Url::parse(&proxy.target).context("invalid target")?;
+        rouille::url::Url::parse(&proxy.target).context("invalid target")?;
         let target = proxy.target.clone();
         let path_rewrite = proxy.path_rewrite.clone();
         let secure = proxy.secure;
@@ -33,34 +32,34 @@ impl ProxyConfig {
             headers,
         })
     }
-}
 
-pub fn proxy_request(
-    http_client: &isahc::HttpClient,
-    request: &rouille::Request,
-    proxy_config: &ProxyConfig,
-) -> Result<rouille::Response> {
-    let req = rouille_to_isahc(request, proxy_config.target.as_ref());
-    let res = http_client.send(req);
-    if let Err(e) = &res {
-        error!("failed to proxy request to {}: {}", proxy_config.target, e);
+    pub fn matches(&self, request: &rouille::Request) -> bool {
+        request.raw_url().starts_with(&self.path)
     }
-    let res = res?;
-    Ok(isahc_to_rouille(res))
+
+    pub fn serve(
+        &self,
+        request: &rouille::Request,
+        http_client: &HttpClient,
+    ) -> Result<rouille::Response> {
+        info!("proxying request at {} to {}", request.url(), self.target);
+        let req = rouille_to_http(request, self.target.as_ref());
+        let res = http_client.send(req);
+        if let Err(e) = &res {
+            warn!("failed to proxy request to {}: {}", self.target, e);
+        }
+        let res = res?;
+        Ok(http_to_rouille(res))
+    }
 }
 
-// must set "connection" header to "close"
-fn rouille_to_isahc(req: &rouille::Request, url: &str) -> http::Request<isahc::Body> {
+fn rouille_to_http(req: &rouille::Request, url: &str) -> http::Request<isahc::Body> {
     let builder = http::Request::builder()
         .method(req.method())
         .uri(url.to_owned() + req.raw_url());
-    let mut builder = req
+    let builder = req
         .headers()
         .fold(builder, |builder, (key, value)| builder.header(key, value));
-    {
-        let headers = builder.headers_mut().expect("no header map");
-        headers.insert("connection", http::HeaderValue::from_static("close"));
-    }
     let mut data = req.data().expect("no data found");
     let mut buffer = Vec::new();
     let size = data
@@ -77,7 +76,7 @@ fn rouille_to_isahc(req: &rouille::Request, url: &str) -> http::Request<isahc::B
     }
 }
 
-fn isahc_to_rouille(res: http::Response<isahc::Body>) -> rouille::Response {
+fn http_to_rouille(res: http::Response<isahc::Body>) -> rouille::Response {
     let status_code = res.status().as_u16();
     let headers = res
         .headers()
