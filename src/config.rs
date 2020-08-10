@@ -9,10 +9,25 @@ pub enum ConfigPath {
 }
 
 impl ConfigPath {
+    const DEFAULT_PATH: &'static str = "Spa.toml";
     pub fn read(&self) -> Result<Config> {
+        if let ConfigPath::Provided(path) = self {
+            debug!("loading config from `{}`", path.to_string_lossy());
+        } else {
+            debug!(
+                "loading config from default path `{}`",
+                ConfigPath::DEFAULT_PATH
+            )
+        }
         let config = match self {
-            ConfigPath::Default => fs::read_to_string("Spa.toml")
-                .context("could not find a `Spa.toml` in the current directory")?,
+            ConfigPath::Default => {
+                fs::read_to_string(ConfigPath::DEFAULT_PATH).with_context(|| {
+                    format!(
+                        "could not find a `{}` in the current directory",
+                        ConfigPath::DEFAULT_PATH
+                    )
+                })?
+            }
             ConfigPath::Provided(path) => fs::read_to_string(&path).with_context(|| {
                 format!("could not read config file at {}", path.to_string_lossy())
             })?,
@@ -60,7 +75,7 @@ pub struct ProxyTarget {
 }
 
 fn default_port() -> u16 {
-    4300
+    4242
 }
 fn default_host() -> String {
     "127.0.0.1".to_owned()

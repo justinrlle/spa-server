@@ -16,3 +16,5 @@ isahc = "0.9.6"
 shellexpand = "2.0.0"
 directories = "3.0.1"
 dirs = "3.0.1"
+log = "0.4.11"
+fern = { version = "0.6.0", features = ["colored"] }

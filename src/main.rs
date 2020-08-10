@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate log;
 use std::path::PathBuf;
 use std::{
     borrow::Cow,
@@ -11,12 +13,39 @@ use config::ConfigPath;
 use server::Server;
 
 use crate::archive::ArchiveFormat;
+use log::LevelFilter;
 
 mod archive;
 mod config;
 mod server;
 
+fn setup_logger(level: LevelFilter) -> Result<()> {
+    use fern::colors::{Color, ColoredLevelConfig};
+    let colors = ColoredLevelConfig::new()
+        .error(Color::Red)
+        .warn(Color::Yellow)
+        .info(Color::Green)
+        .debug(Color::Blue)
+        .trace(Color::Magenta);
+
+    fern::Dispatch::new()
+        .format(move |out, message, record| {
+            out.finish(format_args!(
+                "{level:<5} [{target}] {message}",
+                level = colors.color(record.level()),
+                target = record.target(),
+                message = message
+            ))
+        })
+        .level(level)
+        .level_for("spa_server::server::proxy", LevelFilter::Warn)
+        .chain(std::io::stderr())
+        .apply()?;
+    Ok(())
+}
+
 fn main() -> Result<()> {
+    setup_logger(LevelFilter::Debug).context("failed to init logger, this is surely a bug")?;
     let config_location = env::args_os()
         .nth(1)
         .map(ConfigPath::Provided)
@@ -35,7 +64,7 @@ fn main() -> Result<()> {
         let cache_folder = cache_dir()?;
         let extracted_path = archive::extract_path(&folder, archive, &cache_folder)
             .context("failed to deduce extracted path for archive")?;
-        dbg!(&extracted_path);
+        debug!("{}", extracted_path.display());
         extract(&folder, archive, &extracted_path)?;
         if let Some(base_folder) = &config.server.base_path {
             let mut extracted_path = extracted_path;
@@ -48,10 +77,10 @@ fn main() -> Result<()> {
         PathBuf::from(folder.into_owned())
     };
 
-    dbg!(&folder);
+    debug!("{}", folder.display());
 
     let server = Server::new(folder, &config.proxies)?;
-    dbg!(&server.proxies);
+    debug!("{:?}", server.proxies);
 
     println!(
         "listening on http://{}:{}",
@@ -86,7 +115,7 @@ fn cache_dir() -> Result<PathBuf> {
     let cache_folder = project_dirs
         .map(|p| p.cache_dir().to_owned())
         .unwrap_or_else(|| temp_dir.clone());
-    dbg!(cache_folder.display());
+    debug!("{}", cache_folder.display());
     fs::create_dir_all(&cache_folder)
         .with_context(|| format!("failed to create cache path: {}", cache_folder.display()))?;
     Ok(cache_folder)
