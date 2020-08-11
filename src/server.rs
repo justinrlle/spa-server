@@ -78,7 +78,7 @@ fn wants_html(request: &rouille::Request) -> bool {
     if let Some(accept) = request.header("accept") {
         accept
             .split(',')
-            .flat_map(|mime| mime.parse::<mime::Mime>().ok())
+            .flat_map(|mime| mime.trim().parse::<mime::Mime>().ok())
             .any(|mime| mime.type_() == mime::TEXT && mime.subtype() == mime::HTML)
     } else {
         false
