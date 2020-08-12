@@ -40,17 +40,21 @@ fn setup_logger(level: LevelFilter) -> Result<()> {
 
     fern::Dispatch::new()
         .format(move |out, message, record| {
+            let date_time = chrono::Utc::now().with_timezone(&offset);
             out.finish(format_args!(
                 "{level:<5} [{time}] {target}: {message}",
                 level = colors.color(record.level()),
-                time = chrono::Utc::now().with_timezone(&offset).format("%Y-%m-%d %H:%M:%S%.3f"),
+                time = date_time.format("%Y-%m-%d %H:%M:%S%.3f"),
                 target = record.target(),
                 message = message
             ))
         })
         .level(LevelFilter::Error)
-        .level_for("spa_server::server::proxy", LevelFilter::Warn)
         .level_for("spa_server", level)
+        .level_for(
+            "spa_server::server::proxy",
+            std::cmp::max(LevelFilter::Warn, level),
+        )
         .chain(std::io::stderr())
         .apply()?;
     Ok(())
