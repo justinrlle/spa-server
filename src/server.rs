@@ -5,8 +5,33 @@ use proxy::ProxyConfig;
 
 use anyhow::{Context, Result};
 use mime_guess::mime;
+use std::time::Duration;
 
 mod proxy;
+
+pub fn log_success(request: &rouille::Request, _response: &rouille::Response, duration: Duration) {
+    let method = request.method();
+    let path = request.raw_url().split('?').next().unwrap();
+    let time = duration.as_millis();
+    info!(
+        "{method} {path} - {time}ms",
+        method = method,
+        path = path,
+        time = time
+    );
+}
+
+pub fn log_error(request: &rouille::Request, duration: Duration) {
+    let method = request.method();
+    let path = request.raw_url().split('?').next().unwrap();
+    let time = duration.as_millis();
+    warn!(
+        "Handler panicked :{method} {path} - {time}ms",
+        method = method,
+        path = path,
+        time = time
+    );
+}
 
 pub struct Server {
     pub folder: PathBuf,
@@ -76,9 +101,8 @@ fn serve_file(file_path: &PathBuf, mime: mime::Mime) -> rouille::Response {
 
 fn wants_html(request: &rouille::Request) -> bool {
     if let Some(accept) = request.header("accept") {
-        accept
-            .split(',')
-            .flat_map(|mime| mime.trim().parse::<mime::Mime>().ok())
+        rouille::input::parse_priority_header(accept)
+            .flat_map(|(mime, _)| mime.parse::<mime::Mime>().ok())
             .any(|mime| mime.type_() == mime::TEXT && mime.subtype() == mime::HTML)
     } else {
         false

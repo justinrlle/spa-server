@@ -1,18 +1,18 @@
-use std::{collections::HashMap, ffi::OsString, fmt, fs};
+use std::{collections::HashMap, fmt, fs};
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
 pub enum ConfigPath {
     Default,
-    Provided(OsString),
+    Provided(String),
 }
 
 impl ConfigPath {
     const DEFAULT_PATH: &'static str = "Spa.toml";
     pub fn read(&self) -> Result<Config> {
         if let ConfigPath::Provided(path) = self {
-            debug!("loading config from `{}`", path.to_string_lossy());
+            debug!("loading config from `{}`", path);
         } else {
             debug!(
                 "loading config from default path `{}`",
@@ -28,9 +28,8 @@ impl ConfigPath {
                     )
                 })?
             }
-            ConfigPath::Provided(path) => fs::read_to_string(&path).with_context(|| {
-                format!("could not read config file at {}", path.to_string_lossy())
-            })?,
+            ConfigPath::Provided(path) => fs::read_to_string(&path)
+                .with_context(|| format!("could not read config file at {}", path))?,
         };
         toml::from_str::<Config>(&config)
             .with_context(|| format!("`{}` is not a valid config file", self))
@@ -41,7 +40,7 @@ impl fmt::Display for ConfigPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ConfigPath::Default => write!(f, "Spa.toml"),
-            ConfigPath::Provided(path) => write!(f, "{}", path.to_string_lossy()),
+            ConfigPath::Provided(path) => write!(f, "{}", path),
         }
     }
 }

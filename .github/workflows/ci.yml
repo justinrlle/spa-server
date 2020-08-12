@@ -18,8 +18,14 @@ jobs:
           command: check
 
   test:
-    name: Test Suite
-    runs-on: ubuntu-latest
+    name: Test Suite - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1

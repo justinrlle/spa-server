@@ -1,25 +1,35 @@
 #[macro_use]
 extern crate log;
 use std::path::PathBuf;
-use std::{
-    borrow::Cow,
-    env, fs,
-    io::{self},
-};
+use std::{borrow::Cow, env, fs};
 
 use anyhow::{Context, Result};
+use argh::FromArgs;
+use log::LevelFilter;
 
 use config::ConfigPath;
 use server::Server;
-
-use crate::archive::ArchiveFormat;
-use log::LevelFilter;
 
 mod archive;
 mod config;
 mod server;
 
+#[derive(Debug, FromArgs)]
+/// spa-server, a local server for already built SPAs (Single Page Applications).
+struct Options {
+    /// log level of the application, defaults to `WARN`, can be one of `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`
+    #[argh(option, short = 'l', default = "LevelFilter::Warn")]
+    log: LevelFilter,
+    /// optional `dotenv` file with variables needed for path url
+    #[argh(option, short = 'e')]
+    env_file: Option<String>,
+    /// path to config file, defaults to `Spa.toml`
+    #[argh(positional)]
+    config: Option<String>,
+}
+
 fn setup_logger(level: LevelFilter) -> Result<()> {
+    let offset = chrono::Local::now().offset().to_owned();
     use fern::colors::{Color, ColoredLevelConfig};
     let colors = ColoredLevelConfig::new()
         .error(Color::Red)
@@ -31,26 +41,32 @@ fn setup_logger(level: LevelFilter) -> Result<()> {
     fern::Dispatch::new()
         .format(move |out, message, record| {
             out.finish(format_args!(
-                "{level:<5} [{target}] {message}",
+                "{level:<5} [{time}] {target}: {message}",
                 level = colors.color(record.level()),
+                time = chrono::Utc::now().with_timezone(&offset).format("%Y-%m-%d %H:%M:%S%.3f"),
                 target = record.target(),
                 message = message
             ))
         })
-        .level(level)
+        .level(LevelFilter::Error)
         .level_for("spa_server::server::proxy", LevelFilter::Warn)
+        .level_for("spa_server", level)
         .chain(std::io::stderr())
         .apply()?;
     Ok(())
 }
 
 fn main() -> Result<()> {
-    setup_logger(LevelFilter::Debug).context("failed to init logger, this is surely a bug")?;
-    let config_location = env::args_os()
-        .nth(1)
+    let opts: Options = argh::from_env();
+    setup_logger(opts.log).context("failed to init logger, this is surely a bug")?;
+    trace!("options: {:#?}", opts);
+    let config_location = opts
+        .config
         .map(ConfigPath::Provided)
         .unwrap_or(ConfigPath::Default);
     let config = config_location.read()?;
+
+    let _env_file = opts.env_file;
 
     let folder = expand_path(&config.server.folder)?;
     let archive = archive::detect(&folder);
@@ -59,13 +75,11 @@ fn main() -> Result<()> {
         anyhow::ensure!(
             archive.is_tar(),
             "got {:?} archive, only tar archives are supported",
-            archive.kind
+            archive.kind()
         );
         let cache_folder = cache_dir()?;
-        let extracted_path = archive::extract_path(&folder, archive, &cache_folder)
-            .context("failed to deduce extracted path for archive")?;
-        debug!("{}", extracted_path.display());
-        extract(&folder, archive, &extracted_path)?;
+        let extracted_path = archive::extract(&folder, archive, &cache_folder)?;
+        info!("serving from archive at {}", &config.server.folder);
         if let Some(base_folder) = &config.server.base_path {
             let mut extracted_path = extracted_path;
             extracted_path.push(base_folder);
@@ -74,24 +88,29 @@ fn main() -> Result<()> {
             extracted_path
         }
     } else {
+        info!("serving from folder at {}", &config.server.folder);
         PathBuf::from(folder.into_owned())
     };
 
-    debug!("{}", folder.display());
+    debug!("serving from: {}", folder.display());
 
     let server = Server::new(folder, &config.proxies)?;
-    debug!("{:?}", server.proxies);
-
-    println!(
-        "listening on http://{}:{}",
-        config.server.host, config.server.port
-    );
+    debug!("proxies: {:?}", server.proxies);
 
     let addr = (config.server.host.as_ref(), config.server.port);
 
-    rouille::start_server_with_pool(addr, None, move |request| {
-        rouille::log(request, io::stdout(), || server.serve_request(request))
-    });
+    let server = rouille::Server::new(addr, move |request| {
+        rouille::log_custom(request, server::log_success, server::log_error, || {
+            server.serve_request(request)
+        })
+    })
+    .map_err(|e| anyhow::anyhow!(e))
+    .with_context(|| format!("Failed to listen on port {}", addr.1))?
+    .pool_size(8 * num_cpus::get());
+
+    println!("Listening on http://{}", server.server_addr());
+    server.run();
+    Ok(())
 }
 
 fn expand_path(path: &str) -> Result<Cow<str>> {
@@ -115,39 +134,8 @@ fn cache_dir() -> Result<PathBuf> {
     let cache_folder = project_dirs
         .map(|p| p.cache_dir().to_owned())
         .unwrap_or_else(|| temp_dir.clone());
-    debug!("{}", cache_folder.display());
+    debug!("cache folder: {}", cache_folder.display());
     fs::create_dir_all(&cache_folder)
         .with_context(|| format!("failed to create cache path: {}", cache_folder.display()))?;
     Ok(cache_folder)
-}
-
-fn extract(folder: &str, archive: ArchiveFormat, extracted_path: &PathBuf) -> Result<()> {
-    match fs::metadata(extracted_path) {
-        Ok(metadata) => {
-            if metadata.is_dir() {
-                fs::remove_dir_all(&extracted_path).with_context(|| {
-                    format!(
-                        "failed to remove old directory: {}",
-                        extracted_path.display()
-                    )
-                })?;
-            } else if metadata.is_file() {
-                fs::remove_file(&extracted_path).with_context(|| {
-                    format!(
-                        "failed to remove old directory: {}",
-                        extracted_path.display()
-                    )
-                })?;
-            }
-        }
-        Err(e) => {
-            anyhow::ensure!(
-                e.kind() == io::ErrorKind::NotFound,
-                "failed to get metadata for path: {}",
-                extracted_path.display()
-            );
-        }
-    }
-    fs::create_dir(&extracted_path).context("failed to create folder for extraction")?;
-    archive::extract(&folder, archive, &extracted_path).context("failed to extract archive")
 }
