@@ -3,6 +3,74 @@ use std::{collections::HashMap, fmt, fs};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    /// Configure the server
+    pub server: ServerConfig,
+    /// Configure the proxies. The keys represent the part that will be matched to test if a call
+    /// must be proxied, and they will always be matched at the beginning of the request's url.
+    pub proxies: HashMap<String, ProxyTarget>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ServerConfig {
+    /// The only necessary property, that is a path, be it to a folder, to an archive, or to an http
+    /// resource (soon™). It can contain the `~` and it can contain environment variables.
+    /// TODO: rename it to something better considering it can point to other things than folders
+    pub folder: String,
+    /// The base path to use inside the application, only used (and useful) with archive or http
+    /// resources.
+    /// # Example
+    /// ```toml
+    /// [server]
+    /// folder = "~/app.tar.gz"
+    /// base_path = "app"
+    /// ```
+    #[serde(default)]
+    pub base_path: Option<String>,
+    /// The port the application should listen on, defaults to [default_port](ServerConfig::default_port)
+    #[serde(default = "ServerConfig::default_port")]
+    pub port: u16,
+    /// The host the application should listen on, defaults to [default_host](ServerConfig::default_host)
+    #[serde(default = "ServerConfig::default_host")]
+    pub host: String,
+}
+
+impl ServerConfig {
+    fn default_port() -> u16 {
+        4242
+    }
+    fn default_host() -> String {
+        "127.0.0.1".to_owned()
+    }
+}
+
+/// Currently, a proxy target can only be defined as a path to be matched, and an url to send the
+/// same request to. No path rewrite is supported at all.
+#[derive(Debug, Deserialize)]
+pub struct ProxyTarget {
+    /// The target url (protocol, host, port, paths...).
+    pub target: String,
+    /// Path rewriting, not used for now.
+    #[serde(default)]
+    pub path_rewrite: Option<(String, String)>,
+    /// Headers to add to the proxied request.
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+}
+
+pub fn from_folder(folder: String) -> Config {
+    Config {
+        server: ServerConfig {
+            folder,
+            base_path: None,
+            host: ServerConfig::default_host(),
+            port: ServerConfig::default_port(),
+        },
+        proxies: HashMap::new(),
+    }
+}
+
 pub enum ConfigPath {
     Default,
     Provided(String),
@@ -43,39 +111,4 @@ impl fmt::Display for ConfigPath {
             ConfigPath::Provided(path) => write!(f, "{}", path),
         }
     }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Config {
-    pub server: ServerConfig,
-    pub proxies: HashMap<String, ProxyTarget>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ServerConfig {
-    pub folder: String,
-    #[serde(default)]
-    pub base_path: Option<String>,
-    #[serde(default = "default_port")]
-    pub port: u16,
-    #[serde(default = "default_host")]
-    pub host: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ProxyTarget {
-    pub target: String,
-    #[serde(default)]
-    pub path_rewrite: Option<(String, String)>,
-    #[serde(default)]
-    pub secure: bool,
-    #[serde(default)]
-    pub headers: HashMap<String, String>,
-}
-
-fn default_port() -> u16 {
-    4242
-}
-fn default_host() -> String {
-    "127.0.0.1".to_owned()
 }

@@ -20,6 +20,9 @@ struct Options {
     /// log level of the application, defaults to `WARN`, can be one of `OFF`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `TRACE`
     #[argh(option, short = 'l', default = "LevelFilter::Warn")]
     log: LevelFilter,
+    /// serve from a folder instead of reading from config
+    #[argh(option, short = 's')]
+    serve: Option<String>,
     /// optional `dotenv` file with variables needed for path url
     #[argh(option, short = 'e')]
     env_file: Option<String>,
@@ -64,11 +67,16 @@ fn main() -> Result<()> {
     let opts: Options = argh::from_env();
     setup_logger(opts.log).context("failed to init logger, this is surely a bug")?;
     trace!("options: {:#?}", opts);
-    let config_location = opts
-        .config
-        .map(ConfigPath::Provided)
-        .unwrap_or(ConfigPath::Default);
-    let config = config_location.read()?;
+    let config = if let Some(folder) = &opts.serve {
+        trace!("using serve option instead of config file");
+        config::from_folder(folder.to_owned())
+    } else {
+        let config_location = opts
+            .config
+            .map(ConfigPath::Provided)
+            .unwrap_or(ConfigPath::Default);
+        config_location.read()?
+    };
 
     let _env_file = opts.env_file;
 
