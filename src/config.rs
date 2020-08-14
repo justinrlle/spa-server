@@ -14,16 +14,16 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 pub struct ServerConfig {
-    /// The only necessary property, that is a path, be it to a folder, to an archive, or to an http
-    /// resource (soon™). It can contain the `~` and it can contain environment variables.
-    /// TODO: rename it to something better considering it can point to other things than folders
-    pub folder: String,
+    /// The only necessary property, determining what will be served. It can be a path to a folder,
+    /// a path to an archive, or an http url pointing to an archive. It can contain the `~` and
+    /// environment variables.
+    pub serve: String,
     /// The base path to use inside the application, only used (and useful) with archive or http
     /// resources.
     /// # Example
     /// ```toml
     /// [server]
-    /// folder = "~/app.tar.gz"
+    /// serve = "~/app.tar.gz"
     /// base_path = "app"
     /// ```
     #[serde(default)]
@@ -62,7 +62,7 @@ pub struct ProxyTarget {
 pub fn from_folder(folder: String) -> Config {
     Config {
         server: ServerConfig {
-            folder,
+            serve: folder,
             base_path: None,
             host: ServerConfig::default_host(),
             port: ServerConfig::default_port(),

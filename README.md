@@ -23,11 +23,11 @@ $ spa-server -s dist/project-name
 
 ### Using a config file
 
-If you want to have proxies, or customize the host and the port, you must use a config file. Given one called `Spa-project-name.toml`:
+If you want to have proxies, customize the host or the port, you must use a config file. Given one called `Spa-project-name.toml`:
 ```toml
 [server]
 port = 4200
-folder = "~/git/project-name/dist/project-name" # support for `~` in paths
+serve = "~/git/project-name/dist/project-name" # support for `~` in paths
 
 [proxies]
 "/api" = { target = "http://localhost:8080" }

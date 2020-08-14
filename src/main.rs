@@ -80,7 +80,7 @@ fn main() -> Result<()> {
 
     let _env_file = opts.env_file;
 
-    let folder = expand_path(&config.server.folder)?;
+    let folder = expand_path(&config.server.serve)?;
     let archive = archive::detect(&folder);
 
     let folder = if let Some(archive) = archive {
@@ -91,7 +91,7 @@ fn main() -> Result<()> {
         );
         let cache_folder = cache_dir()?;
         let extracted_path = archive::extract(&folder, archive, &cache_folder)?;
-        info!("serving from archive at {}", &config.server.folder);
+        info!("serving from archive at {}", &config.server.serve);
         if let Some(base_folder) = &config.server.base_path {
             let mut extracted_path = extracted_path;
             extracted_path.push(base_folder);
@@ -100,7 +100,7 @@ fn main() -> Result<()> {
             extracted_path
         }
     } else {
-        info!("serving from folder at {}", &config.server.folder);
+        info!("serving from folder at {}", &config.server.serve);
         PathBuf::from(folder.into_owned())
     };
 
