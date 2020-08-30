@@ -10,9 +10,9 @@ use log::LevelFilter;
 use config::ConfigPath;
 use server::Server;
 
-mod archive;
 mod config;
 mod server;
+mod source;
 
 #[derive(Debug, FromArgs)]
 /// spa-server, a local server for already built SPAs (Single Page Applications).
@@ -78,31 +78,12 @@ fn main() -> Result<()> {
         config_location.read()?
     };
 
-    let _env_file = opts.env_file;
+    load_env_file(opts.env_file.as_deref())?;
 
-    let folder = expand_path(&config.server.serve)?;
-    let archive = archive::detect(&folder);
-
-    let folder = if let Some(archive) = archive {
-        anyhow::ensure!(
-            archive.is_tar(),
-            "got {:?} archive, only tar archives are supported",
-            archive.kind()
-        );
-        let cache_folder = cache_dir()?;
-        let extracted_path = archive::extract(&folder, archive, &cache_folder)?;
-        info!("serving from archive at {}", &config.server.serve);
-        if let Some(base_folder) = &config.server.base_path {
-            let mut extracted_path = extracted_path;
-            extracted_path.push(base_folder);
-            extracted_path
-        } else {
-            extracted_path
-        }
-    } else {
-        info!("serving from folder at {}", &config.server.serve);
-        PathBuf::from(folder.into_owned())
-    };
+    let app_path = expand_path(&config.server.serve)?;
+    let source = source::detect(&app_path);
+    let cache_folder = &cache_dir()?;
+    let folder = source.setup(&app_path, cache_folder, config.server.base_path.as_deref())?;
 
     debug!("serving from: {}", folder.display());
 
@@ -150,4 +131,16 @@ fn cache_dir() -> Result<PathBuf> {
     fs::create_dir_all(&cache_folder)
         .with_context(|| format!("failed to create cache path: {}", cache_folder.display()))?;
     Ok(cache_folder)
+}
+
+fn load_env_file(opt_env_file: Option<&str>) -> Result<()> {
+    if let Some(env_file) = opt_env_file {
+        trace!("loading env file from {}", env_file);
+        dotenv::from_path(env_file)
+            .with_context(|| format!("failed to load env file at `{}`", env_file))?;
+    } else {
+        trace!("loading .env");
+        dotenv::dotenv().ok();
+    };
+    Ok(())
 }

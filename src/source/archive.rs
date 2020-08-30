@@ -154,7 +154,7 @@ impl ArchiveFormat {
     }
 }
 
-fn extract_path(path: &str, archive: ArchiveFormat, cache_folder: &Path) -> Result<PathBuf> {
+fn extract_path(path: &str, archive: &ArchiveFormat, cache_folder: &Path) -> Result<PathBuf> {
     anyhow::ensure!(
         archive.is_tar(),
         "archive format not supported: {}",
@@ -191,7 +191,7 @@ fn extract_path(path: &str, archive: ArchiveFormat, cache_folder: &Path) -> Resu
     Ok(cache_folder.join(encoded_path))
 }
 
-fn extract_archive_to(path: &str, archive: ArchiveFormat, extract_path: &Path) -> Result<()> {
+fn extract_archive_to(path: &str, archive: &ArchiveFormat, extract_path: &Path) -> Result<()> {
     assert!(archive.is_tar(), "only tar archives are supported");
     let status = Command::new("tar")
         .arg("xf")
@@ -212,7 +212,7 @@ fn extract_archive_to(path: &str, archive: ArchiveFormat, extract_path: &Path) -
     Ok(())
 }
 
-pub fn extract(folder: &str, archive: ArchiveFormat, cache_folder: &Path) -> Result<PathBuf> {
+pub fn extract(folder: &str, archive: &ArchiveFormat, cache_folder: &Path) -> Result<PathBuf> {
     let extracted_path = extract_path(&folder, archive, cache_folder)
         .context("failed to deduce extracted path for archive")?;
     debug!("path for extracted archive: {}", extracted_path.display());
@@ -325,7 +325,7 @@ mod test {
         assert_eq!(detect("filetar.zst"), Some(ArchiveFormat::new(4, Zstd)));
     }
     fn wrap_extract_path(path: &str, cache_path: &Path) -> Result<PathBuf> {
-        extract_path(path, detect(path).expect("archive detection"), cache_path)
+        extract_path(path, &detect(path).expect("archive detection"), cache_path)
     }
 
     #[cfg(unix)]
