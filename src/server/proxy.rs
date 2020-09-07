@@ -18,7 +18,8 @@ impl ProxyConfig {
         if !path.ends_with('/') {
             path += "/";
         }
-        rouille::url::Url::parse(&proxy.target).context("invalid target")?;
+        rouille::url::Url::parse(&proxy.target)
+            .with_context(|| format!("invalid target: `{}`", &proxy.target))?;
         let target = proxy.target.clone();
         let path_rewrite = proxy.path_rewrite.clone();
         let headers = proxy.headers.clone();
@@ -32,6 +33,7 @@ impl ProxyConfig {
 
     pub fn matches(&self, request: &rouille::Request) -> bool {
         request.raw_url().starts_with(&self.path)
+            || request.raw_url() == &self.path[..self.path.len() - 1]
     }
 
     pub fn serve(
@@ -104,5 +106,91 @@ impl ProxyConfig {
             data,
             upgrade: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proxy_config_new() {
+        let valid_proxy = ProxyConfig::new(
+            "/api/",
+            &ProxyTarget {
+                target: "http://localhost:8080".to_owned(),
+                path_rewrite: None,
+                headers: Default::default(),
+            },
+        )
+        .unwrap();
+        assert_eq!(&valid_proxy.path, "/api/");
+        assert_eq!(&valid_proxy.target, "http://localhost:8080");
+
+        let valid_proxy = ProxyConfig::new(
+            "/api",
+            &ProxyTarget {
+                target: "http://localhost:8080".to_owned(),
+                path_rewrite: None,
+                headers: Default::default(),
+            },
+        )
+        .unwrap();
+        assert_eq!(&valid_proxy.path, "/api/");
+        assert_eq!(&valid_proxy.target, "http://localhost:8080");
+
+        let error = ProxyConfig::new(
+            "api",
+            &ProxyTarget {
+                target: "http://localhost:8080".to_owned(),
+                path_rewrite: None,
+                headers: Default::default(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.to_string(), "path `api` is not a valid path");
+
+        let error = ProxyConfig::new(
+            "/api",
+            &ProxyTarget {
+                target: "/localhost".to_owned(),
+                path_rewrite: None,
+                headers: Default::default(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error.downcast::<rouille::url::ParseError>(),
+            Ok(rouille::url::ParseError::RelativeUrlWithoutBase)
+        ));
+    }
+
+    #[test]
+    fn proxy_prefix_matches() {
+        let proxy = ProxyConfig::new(
+            "/api",
+            &ProxyTarget {
+                target: "http://localhost:8080".to_owned(),
+                path_rewrite: None,
+                headers: Default::default(),
+            },
+        )
+        .unwrap();
+
+        assert!(proxy.matches(&rouille::Request::fake_http("GET", "/api", vec![], vec![])));
+        assert!(proxy.matches(&rouille::Request::fake_http("GET", "/api/", vec![], vec![])));
+        assert!(proxy.matches(&rouille::Request::fake_http(
+            "GET",
+            "/api/endpoint",
+            vec![],
+            vec![]
+        )));
+        assert!(!proxy.matches(&rouille::Request::fake_http("GET", "/", vec![], vec![])));
+        assert!(!proxy.matches(&rouille::Request::fake_http(
+            "GET",
+            "/script.js",
+            vec![],
+            vec![]
+        )));
     }
 }

@@ -107,9 +107,7 @@ fn main() -> Result<()> {
 }
 
 fn expand_path(path: &str) -> Result<Cow<str>> {
-    let expanded = shellexpand::full(path)
-        .with_context(|| format!("failed to expand path: {}", path))?;
-    Ok(expanded)
+    shellexpand::full(path).with_context(|| format!("failed to expand path: {}", path))
 }
 
 fn load_env_file(opt_env_file: Option<&str>) -> Result<()> {

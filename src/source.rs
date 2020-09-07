@@ -13,13 +13,9 @@ pub struct Source<'a> {
 
 #[derive(Clone, Debug)]
 enum SourceKind {
-    Archive {
-        format: archive::ArchiveFormat,
-    },
+    Archive { format: archive::ArchiveFormat },
     Folder,
-    Http {
-        format: http::HttpArchive,
-    },
+    Http { format: http::HttpArchive },
 }
 
 pub fn detect(app_path: &str) -> Source {
@@ -61,7 +57,7 @@ impl<'a> Source<'a> {
                 } else {
                     Ok(folder)
                 }
-            },
+            }
         }
     }
 }

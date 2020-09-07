@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use super::archive::{ArchiveFormat, self};
+use super::archive::{self, ArchiveFormat};
 
 use anyhow::Result;
 use rouille::url;
@@ -13,7 +13,7 @@ pub struct HttpArchive {
 pub fn detect(app_path: &str) -> Option<HttpArchive> {
     url::Url::parse(app_path)
         .ok()
-        .filter(|url|  url.scheme() == "http" || url.scheme() == "https")
+        .filter(|url| url.scheme() == "http" || url.scheme() == "https")
         .and_then(|url| archive::detect(url.path()))
         .map(|format| HttpArchive { format })
 }
@@ -24,7 +24,8 @@ fn private_url(url: &str) -> url::Url {
         "{origin}{path}",
         origin = url.origin().ascii_serialization(),
         path = url.path(),
-    )).expect("failed to create private url")
+    ))
+    .expect("failed to create private url")
 }
 
 /// This function can only be called for urls that have been constructed by [`detect`](detect).
@@ -41,15 +42,23 @@ pub fn extract(app_path: &str, format: &HttpArchive, _cache_folder: &Path) -> Re
     todo!("download and extract archive")
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_private_url() {
-        assert_eq!(private_url("http://foo:bar@example.com").to_string(), "http://example.com/");
-        assert_eq!(private_url("http://example.com/foo").to_string(), "http://example.com/foo");
-        assert_eq!(private_url("http://example.com:8080/foo").to_string(), "http://example.com:8080/foo");
+        assert_eq!(
+            private_url("http://foo:bar@example.com").to_string(),
+            "http://example.com/"
+        );
+        assert_eq!(
+            private_url("http://example.com/foo").to_string(),
+            "http://example.com/foo"
+        );
+        assert_eq!(
+            private_url("http://example.com:8080/foo").to_string(),
+            "http://example.com:8080/foo"
+        );
     }
 }

@@ -1,6 +1,6 @@
 use std::{
     fmt, fs, io,
-    path::{Path, PathBuf, Component},
+    path::{Component, Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -155,17 +155,23 @@ impl ArchiveFormat {
     }
 }
 
-fn path_for_extraction(path: &Path, archive: &ArchiveFormat, cache_folder: &Path) -> Result<PathBuf> {
+fn path_for_extraction(
+    path: &Path,
+    archive: &ArchiveFormat,
+    cache_folder: &Path,
+) -> Result<PathBuf> {
     anyhow::ensure!(
         archive.is_tar(),
         "archive format not supported: {}",
         archive
     );
-    let head = path.file_name()
+    let head = path
+        .file_name()
         .expect("received a path with no file name")
         .to_string_lossy();
     let head = &head[..head.len() - archive.extension_length];
-    let parent = path.parent()
+    let parent = path
+        .parent()
         .expect("received a path with no parent")
         .components()
         .filter(|component| matches!(component, Component::Normal(_)))
@@ -199,7 +205,11 @@ fn extract_archive_to(path: &str, archive: &ArchiveFormat, extract_path: &Path) 
     Ok(())
 }
 
-pub fn extract(archive_path: &str, archive: &ArchiveFormat, cache_folder: &Path) -> Result<PathBuf> {
+pub fn extract(
+    archive_path: &str,
+    archive: &ArchiveFormat,
+    cache_folder: &Path,
+) -> Result<PathBuf> {
     let full_archive_path = Path::new(archive_path)
         .canonicalize()
         .context("failed to canonicalize path of archive")?;
@@ -233,7 +243,8 @@ pub fn extract(archive_path: &str, archive: &ArchiveFormat, cache_folder: &Path)
         }
     }
     fs::create_dir(&extracted_path).context("failed to create folder for extraction")?;
-    extract_archive_to(&archive_path, archive, &extracted_path).context("failed to extract archive")?;
+    extract_archive_to(&archive_path, archive, &extracted_path)
+        .context("failed to extract archive")?;
     Ok(extracted_path)
 }
 
@@ -315,7 +326,11 @@ mod test {
         assert_eq!(detect("filetar.zst"), Some(ArchiveFormat::new(4, Zstd)));
     }
     fn wrap_extract_path(path: &str, cache_path: &Path) -> Result<PathBuf> {
-        path_for_extraction(&Path::new(path), &detect(path).expect("archive detection"), cache_path)
+        path_for_extraction(
+            &Path::new(path),
+            &detect(path).expect("archive detection"),
+            cache_path,
+        )
     }
 
     #[cfg(unix)]
