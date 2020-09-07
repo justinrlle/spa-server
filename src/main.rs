@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate log;
-use std::path::PathBuf;
-use std::{borrow::Cow, env, fs};
+use std::borrow::Cow;
 
 use anyhow::{Context, Result};
 use argh::FromArgs;
@@ -10,6 +9,7 @@ use log::LevelFilter;
 use config::ConfigPath;
 use server::Server;
 
+mod cache;
 mod config;
 mod server;
 mod source;
@@ -82,8 +82,8 @@ fn main() -> Result<()> {
 
     let app_path = expand_path(&config.server.serve)?;
     let source = source::detect(&app_path);
-    let cache_folder = &cache_dir()?;
-    let folder = source.setup(&app_path, cache_folder, config.server.base_path.as_deref())?;
+    let cache_folder = &cache::cache_dir()?;
+    let folder = source.setup(cache_folder, config.server.base_path.as_deref())?;
 
     debug!("serving from: {}", folder.display());
 
@@ -107,30 +107,9 @@ fn main() -> Result<()> {
 }
 
 fn expand_path(path: &str) -> Result<Cow<str>> {
-    let expanded = shellexpand::full_with_context(path, dirs::home_dir, |s| {
-        if let Some(pos) = s.find("::") {
-            let namespace = &s[..pos];
-            let key = &s[pos + 2..];
-            // TODO: decide how to handle secrets and env
-            Ok(Some(format!("`namespace={},key={}`", namespace, key)))
-        } else {
-            std::env::var(s).map(Some)
-        }
-    })
-    .with_context(|| format!("failed to expand path: {}", path))?;
+    let expanded = shellexpand::full(path)
+        .with_context(|| format!("failed to expand path: {}", path))?;
     Ok(expanded)
-}
-
-fn cache_dir() -> Result<PathBuf> {
-    let temp_dir = env::temp_dir();
-    let project_dirs = directories::ProjectDirs::from("beer", "justinrlle", "Spa-Server");
-    let cache_folder = project_dirs
-        .map(|p| p.cache_dir().to_owned())
-        .unwrap_or_else(|| temp_dir.clone());
-    debug!("cache folder: {}", cache_folder.display());
-    fs::create_dir_all(&cache_folder)
-        .with_context(|| format!("failed to create cache path: {}", cache_folder.display()))?;
-    Ok(cache_folder)
 }
 
 fn load_env_file(opt_env_file: Option<&str>) -> Result<()> {

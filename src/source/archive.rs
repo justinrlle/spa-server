@@ -1,9 +1,10 @@
 use std::{
-    ffi::{OsStr, OsString},
     fmt, fs, io,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf, Component},
     process::{Command, Stdio},
 };
+
+use crate::cache;
 
 use anyhow::{Context, Result};
 
@@ -154,39 +155,25 @@ impl ArchiveFormat {
     }
 }
 
-fn extract_path(path: &str, archive: &ArchiveFormat, cache_folder: &Path) -> Result<PathBuf> {
+fn path_for_extraction(path: &Path, archive: &ArchiveFormat, cache_folder: &Path) -> Result<PathBuf> {
     anyhow::ensure!(
         archive.is_tar(),
         "archive format not supported: {}",
         archive
     );
-    let file_name = &path[..path.len() - archive.extension_length];
-    let file_name = PathBuf::from(file_name)
-        .file_name()
-        .ok_or_else(|| anyhow::anyhow!("there is no file_name in archive path"))?
-        .to_owned();
-    trace!("file_name: {:?}", &file_name);
-    let encoded_path = PathBuf::from(path);
-    trace!("encoded_path (before): {}", encoded_path.display());
-    trace!("encoded_path.parent(): {:?}", encoded_path.parent());
-    let encoded_path = encoded_path
-        .parent()
-        .map(|parent| {
-            if parent.as_os_str() == OsStr::new("") {
-                return PathBuf::from(&file_name);
-            }
-            let mut parent = parent.components().fold(OsString::new(), |mut p, c| {
-                if let Component::Normal(c) = c {
-                    p.push(c);
-                    p.push("_");
-                }
-                p
-            });
-            parent.push(&file_name);
-            PathBuf::from(parent)
-        })
-        .unwrap_or_else(|| PathBuf::from(&file_name));
-    trace!("encoded_path: {}", encoded_path.display());
+    let head = path.file_name()
+        .expect("received a path with no file name")
+        .to_string_lossy();
+    let head = &head[..head.len() - archive.extension_length];
+    let parent = path.parent()
+        .expect("received a path with no parent")
+        .components()
+        .filter(|component| matches!(component, Component::Normal(_)))
+        .fold(PathBuf::new(), |p, c| p.join(c));
+    let to_encode_path = parent.join(head);
+
+    let encoded_path = cache::to_cached_path(&to_encode_path.to_string_lossy().as_bytes());
+    trace!("encoded_path: {}", encoded_path);
 
     Ok(cache_folder.join(encoded_path))
 }
@@ -212,8 +199,11 @@ fn extract_archive_to(path: &str, archive: &ArchiveFormat, extract_path: &Path) 
     Ok(())
 }
 
-pub fn extract(folder: &str, archive: &ArchiveFormat, cache_folder: &Path) -> Result<PathBuf> {
-    let extracted_path = extract_path(&folder, archive, cache_folder)
+pub fn extract(archive_path: &str, archive: &ArchiveFormat, cache_folder: &Path) -> Result<PathBuf> {
+    let full_archive_path = Path::new(archive_path)
+        .canonicalize()
+        .context("failed to canonicalize path of archive")?;
+    let extracted_path = path_for_extraction(&full_archive_path, archive, cache_folder)
         .context("failed to deduce extracted path for archive")?;
     debug!("path for extracted archive: {}", extracted_path.display());
     match fs::metadata(&extracted_path) {
@@ -243,7 +233,7 @@ pub fn extract(folder: &str, archive: &ArchiveFormat, cache_folder: &Path) -> Re
         }
     }
     fs::create_dir(&extracted_path).context("failed to create folder for extraction")?;
-    extract_archive_to(&folder, archive, &extracted_path).context("failed to extract archive")?;
+    extract_archive_to(&archive_path, archive, &extracted_path).context("failed to extract archive")?;
     Ok(extracted_path)
 }
 
@@ -325,7 +315,7 @@ mod test {
         assert_eq!(detect("filetar.zst"), Some(ArchiveFormat::new(4, Zstd)));
     }
     fn wrap_extract_path(path: &str, cache_path: &Path) -> Result<PathBuf> {
-        extract_path(path, &detect(path).expect("archive detection"), cache_path)
+        path_for_extraction(&Path::new(path), &detect(path).expect("archive detection"), cache_path)
     }
 
     #[cfg(unix)]
@@ -338,19 +328,19 @@ mod test {
         );
         assert_eq!(
             wrap_extract_path("src/foo.tar.gz", cache_path).unwrap(),
-            Path::new("foo/bar/src_foo")
+            Path::new("foo/bar/src%2Ffoo")
         );
         assert_eq!(
             wrap_extract_path("/usr/local/foo.tar.gz", cache_path).unwrap(),
-            Path::new("foo/bar/usr_local_foo")
+            Path::new("foo/bar/usr%2Flocal%2Ffoo")
         );
         assert_eq!(
             wrap_extract_path("/etc/foo.tar.gz", cache_path).unwrap(),
-            Path::new("foo/bar/etc_foo")
+            Path::new("foo/bar/etc%2Ffoo")
         );
         assert_eq!(
             wrap_extract_path("dist/front/out/foo.tar.gz", cache_path).unwrap(),
-            Path::new("foo/bar/dist_front_out_foo")
+            Path::new("foo/bar/dist%2Ffront%2Fout%2Ffoo")
         );
         assert_eq!(
             wrap_extract_path("./dist/foo.tar.xz", cache_path).unwrap(),
@@ -368,19 +358,19 @@ mod test {
         );
         assert_eq!(
             wrap_extract_path(r"src\foo.tar.gz", cache_path.as_ref()).unwrap(),
-            Path::new(r"foo\bar\src_foo")
+            Path::new(r"foo\bar\src%5Cfoo")
         );
         assert_eq!(
             wrap_extract_path(r"\Programs\Bar\foo.tar.gz", cache_path.as_ref()).unwrap(),
-            Path::new(r"foo\bar\Programs_Bar_foo")
+            Path::new(r"foo\bar\Programs%5CBar%5Cfoo")
         );
         assert_eq!(
             wrap_extract_path(r"\Projects\foo.tar.gz", cache_path.as_ref()).unwrap(),
-            Path::new(r"foo\bar\Projects_foo")
+            Path::new(r"foo\bar\Projects%5Cfoo")
         );
         assert_eq!(
             wrap_extract_path(r"dist\front\out\foo.tar.gz", cache_path.as_ref()).unwrap(),
-            Path::new(r"foo\bar\dist_front_out_foo")
+            Path::new(r"foo\bar\dist%5Cfront%5Cout%5Cfoo")
         );
     }
 }

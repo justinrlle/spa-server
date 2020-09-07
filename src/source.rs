@@ -1,50 +1,44 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use rouille::url;
 
 mod archive;
+mod http;
 
-#[derive(Copy, Clone, Debug)]
-pub enum SourceKind {
+#[derive(Clone, Debug)]
+pub struct Source<'a> {
+    kind: SourceKind,
+    app_path: &'a str,
+}
+
+#[derive(Clone, Debug)]
+enum SourceKind {
     Archive {
         format: archive::ArchiveFormat,
     },
     Folder,
-    Url {
-        archive_format: archive::ArchiveFormat,
+    Http {
+        format: http::HttpArchive,
     },
 }
 
-pub fn detect(app_path: &str) -> SourceKind {
-    if let Some(format) = archive::detect(app_path) {
-        return SourceKind::Archive { format };
+pub fn detect(app_path: &str) -> Source {
+    let kind = if let Some(format) = archive::detect(app_path) {
+        SourceKind::Archive { format }
+    } else if let Some(format) = http::detect(app_path) {
+        SourceKind::Http { format }
+    } else {
+        SourceKind::Folder
     };
-    if let Some(archive_format) = url::Url::parse(app_path)
-        .ok()
-        .and_then(|url| archive::detect(url.path()))
-    {
-        return SourceKind::Url { archive_format };
-    }
-    SourceKind::Folder
+    Source { kind, app_path }
 }
 
-impl SourceKind {
-    pub fn setup(
-        &self,
-        app_path: &str,
-        cache_folder: &Path,
-        base_folder: Option<&str>,
-    ) -> Result<PathBuf> {
-        match self {
+impl<'a> Source<'a> {
+    pub fn setup(&'a self, cache_folder: &Path, base_folder: Option<&str>) -> Result<PathBuf> {
+        match &self.kind {
             SourceKind::Archive { format } => {
-                anyhow::ensure!(
-                    format.is_tar(),
-                    "got {:?} archive, only tar archives are supported",
-                    format.kind()
-                );
-                info!("serving from archive at {}", app_path);
-                let folder = archive::extract(app_path, format, cache_folder)?;
+                info!("serving from archive at {}", self.app_path);
+                let folder = archive::extract(self.app_path, format, cache_folder)?;
                 if let Some(base_folder) = base_folder {
                     let mut folder = folder;
                     folder.push(base_folder);
@@ -54,12 +48,20 @@ impl SourceKind {
                 }
             }
             SourceKind::Folder => {
-                info!("serving from folder {}", app_path);
-                Ok(PathBuf::from(app_path))
+                info!("serving from folder {}", self.app_path);
+                Ok(PathBuf::from(self.app_path))
             }
-            SourceKind::Url {
-                archive_format: _archive_format,
-            } => todo!("add url source"),
+            SourceKind::Http { format } => {
+                info!("serving from archive located at {}", self.app_path);
+                let folder = http::extract(self.app_path, format, cache_folder)?;
+                if let Some(base_folder) = base_folder {
+                    let mut folder = folder;
+                    folder.push(base_folder);
+                    Ok(folder)
+                } else {
+                    Ok(folder)
+                }
+            },
         }
     }
 }
