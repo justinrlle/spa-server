@@ -4,8 +4,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crate::cache;
-
+use crate::cache::Cache;
 use anyhow::{Context, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -155,11 +154,7 @@ impl ArchiveFormat {
     }
 }
 
-fn path_for_extraction(
-    path: &Path,
-    archive: &ArchiveFormat,
-    cache_folder: &Path,
-) -> Result<PathBuf> {
+fn path_for_extraction(path: &Path, archive: &ArchiveFormat, cache: &Cache) -> Result<PathBuf> {
     anyhow::ensure!(
         archive.is_tar(),
         "archive format not supported: {}",
@@ -177,11 +172,9 @@ fn path_for_extraction(
         .filter(|component| matches!(component, Component::Normal(_)))
         .fold(PathBuf::new(), |p, c| p.join(c));
     let to_encode_path = parent.join(head);
+    trace!("resource path: {}", to_encode_path.display());
 
-    let encoded_path = cache::to_cached_path(&to_encode_path.to_string_lossy().as_bytes());
-    trace!("encoded_path: {}", encoded_path);
-
-    Ok(cache_folder.join(encoded_path))
+    Ok(cache.path_for_resource(&to_encode_path.to_string_lossy().as_bytes()))
 }
 
 fn extract_archive_to(path: &str, archive: &ArchiveFormat, extract_path: &Path) -> Result<()> {
@@ -205,15 +198,11 @@ fn extract_archive_to(path: &str, archive: &ArchiveFormat, extract_path: &Path) 
     Ok(())
 }
 
-pub fn extract(
-    archive_path: &str,
-    archive: &ArchiveFormat,
-    cache_folder: &Path,
-) -> Result<PathBuf> {
+pub fn extract(archive_path: &str, archive: &ArchiveFormat, cache: &Cache) -> Result<PathBuf> {
     let full_archive_path = Path::new(archive_path)
         .canonicalize()
         .context("failed to canonicalize path of archive")?;
-    let extracted_path = path_for_extraction(&full_archive_path, archive, cache_folder)
+    let extracted_path = path_for_extraction(&full_archive_path, archive, cache)
         .context("failed to deduce extracted path for archive")?;
     debug!("path for extracted archive: {}", extracted_path.display());
     match fs::metadata(&extracted_path) {
@@ -325,66 +314,66 @@ mod test {
         assert_eq!(detect("filetar.7z.001"), Some(ArchiveFormat::new(7, P7z)));
         assert_eq!(detect("filetar.zst"), Some(ArchiveFormat::new(4, Zstd)));
     }
-    fn wrap_extract_path(path: &str, cache_path: &Path) -> Result<PathBuf> {
+    fn wrap_extract_path(path: &str, cache: &Cache) -> Result<PathBuf> {
         path_for_extraction(
             &Path::new(path),
             &detect(path).expect("archive detection"),
-            cache_path,
+            cache,
         )
     }
 
     #[cfg(unix)]
     #[test]
     fn unix_extract_path() {
-        let cache_path = Path::new("foo/bar");
+        let cache = Cache::init_with_custom_path_for_test(PathBuf::from("foo/bar"));
         assert_eq!(
-            wrap_extract_path("foo.tar.gz", cache_path).unwrap(),
+            wrap_extract_path("foo.tar.gz", &cache).unwrap(),
             Path::new("foo/bar/foo")
         );
         assert_eq!(
-            wrap_extract_path("src/foo.tar.gz", cache_path).unwrap(),
+            wrap_extract_path("src/foo.tar.gz", &cache).unwrap(),
             Path::new("foo/bar/src%2Ffoo")
         );
         assert_eq!(
-            wrap_extract_path("/usr/local/foo.tar.gz", cache_path).unwrap(),
+            wrap_extract_path("/usr/local/foo.tar.gz", &cache).unwrap(),
             Path::new("foo/bar/usr%2Flocal%2Ffoo")
         );
         assert_eq!(
-            wrap_extract_path("/etc/foo.tar.gz", cache_path).unwrap(),
+            wrap_extract_path("/etc/foo.tar.gz", &cache).unwrap(),
             Path::new("foo/bar/etc%2Ffoo")
         );
         assert_eq!(
-            wrap_extract_path("dist/front/out/foo.tar.gz", cache_path).unwrap(),
+            wrap_extract_path("dist/front/out/foo.tar.gz", &cache).unwrap(),
             Path::new("foo/bar/dist%2Ffront%2Fout%2Ffoo")
         );
         assert_eq!(
-            wrap_extract_path("./dist/foo.tar.xz", cache_path).unwrap(),
-            wrap_extract_path("dist/foo.tar.xz", cache_path).unwrap()
+            wrap_extract_path("./dist/foo.tar.xz", &cache).unwrap(),
+            wrap_extract_path("dist/foo.tar.xz", &cache).unwrap()
         );
     }
 
     #[cfg(windows)]
     #[test]
     fn windows_extract_path() {
-        let cache_path = PathBuf::from(r"foo\bar");
+        let cache = Cache::init_with_custom_path_for_test(PathBuf::from(r"foo\bar"));
         assert_eq!(
-            wrap_extract_path(r"foo.tar.gz", cache_path.as_ref()).unwrap(),
+            wrap_extract_path(r"foo.tar.gz", &cache).unwrap(),
             Path::new(r"foo\bar\foo")
         );
         assert_eq!(
-            wrap_extract_path(r"src\foo.tar.gz", cache_path.as_ref()).unwrap(),
+            wrap_extract_path(r"src\foo.tar.gz", &cache).unwrap(),
             Path::new(r"foo\bar\src%5Cfoo")
         );
         assert_eq!(
-            wrap_extract_path(r"\Programs\Bar\foo.tar.gz", cache_path.as_ref()).unwrap(),
+            wrap_extract_path(r"\Programs\Bar\foo.tar.gz", &cache).unwrap(),
             Path::new(r"foo\bar\Programs%5CBar%5Cfoo")
         );
         assert_eq!(
-            wrap_extract_path(r"\Projects\foo.tar.gz", cache_path.as_ref()).unwrap(),
+            wrap_extract_path(r"\Projects\foo.tar.gz", &cache).unwrap(),
             Path::new(r"foo\bar\Projects%5Cfoo")
         );
         assert_eq!(
-            wrap_extract_path(r"dist\front\out\foo.tar.gz", cache_path.as_ref()).unwrap(),
+            wrap_extract_path(r"dist\front\out\foo.tar.gz", &cache).unwrap(),
             Path::new(r"foo\bar\dist%5Cfront%5Cout%5Cfoo")
         );
     }

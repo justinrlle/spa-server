@@ -1,7 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use super::archive::{self, ArchiveFormat};
 
+use crate::cache::Cache;
 use anyhow::Result;
 use rouille::url;
 
@@ -18,6 +19,18 @@ pub fn detect(app_path: &str) -> Option<HttpArchive> {
         .map(|format| HttpArchive { format })
 }
 
+/// This function can only be called for urls that have been constructed by [`detect`](detect).
+pub fn extract(app_path: &str, format: &HttpArchive, cache: &Cache) -> Result<PathBuf> {
+    anyhow::ensure!(
+        format.format.is_tar(),
+        "got {:?} archive, only tar archives are supported",
+        format.format.kind()
+    );
+    let _cache_path = url_as_cached_path(cache, app_path);
+
+    todo!("download and extract archive")
+}
+
 fn private_url(url: &str) -> url::Url {
     let url = url::Url::parse(url).expect("the provided url is not a valid one");
     url::Url::parse(&format!(
@@ -28,18 +41,14 @@ fn private_url(url: &str) -> url::Url {
     .expect("failed to create private url")
 }
 
-/// This function can only be called for urls that have been constructed by [`detect`](detect).
-pub fn extract(app_path: &str, format: &HttpArchive, _cache_folder: &Path) -> Result<PathBuf> {
-    anyhow::ensure!(
-        format.format.is_tar(),
-        "got {:?} archive, only tar archives are supported",
-        format.format.kind()
-    );
+fn url_as_cached_path(cache: &Cache, app_path: &str) -> PathBuf {
     let private_url = private_url(app_path);
-    let last_slash_idx = private_url.as_str().rfind('/').expect("no '/' in url");
-    let _parent_path = &private_url.as_str()[0..last_slash_idx];
-
-    todo!("download and extract archive")
+    assert_ne!(private_url.path(), "/", "url must have a path");
+    let last_slash_idx = private_url
+        .as_str()
+        .rfind('/')
+        .expect("all urls have a '/'");
+    cache.path_for_resource(private_url.as_str()[0..last_slash_idx].as_bytes())
 }
 
 #[cfg(test)]
@@ -49,16 +58,71 @@ mod tests {
     #[test]
     fn test_private_url() {
         assert_eq!(
-            private_url("http://foo:bar@example.com").to_string(),
+            private_url("http://foo:bar@example.com").as_str(),
             "http://example.com/"
         );
         assert_eq!(
-            private_url("http://example.com/foo").to_string(),
+            private_url("http://example.com/foo").as_str(),
             "http://example.com/foo"
         );
         assert_eq!(
-            private_url("http://example.com:8080/foo").to_string(),
+            private_url("https://example.com/foo").as_str(),
+            "https://example.com/foo"
+        );
+        assert_eq!(
+            private_url("http://example.com:8080/foo").as_str(),
             "http://example.com:8080/foo"
         );
+        assert_eq!(
+            private_url("http://foo:bar@example.com:8080").as_str(),
+            "http://example.com:8080/"
+        );
+    }
+
+    #[test]
+    fn test_url_as_cached_path() {
+        let cache = Cache::init_with_custom_path_for_test(PathBuf::new());
+        assert_eq!(
+            url_as_cached_path(&cache, "http://example.com/app.tar.gz")
+                .to_str()
+                .unwrap(),
+            "http%3A%2F%2Fexample.com"
+        );
+        assert_eq!(
+            url_as_cached_path(&cache, "http://example.com/folder/app.tar.gz")
+                .to_str()
+                .unwrap(),
+            "http%3A%2F%2Fexample.com%2Ffolder"
+        );
+        assert_eq!(
+            url_as_cached_path(&cache, "http://example.com:8080/app.tar.gz")
+                .to_str()
+                .unwrap(),
+            "http%3A%2F%2Fexample.com%3A8080"
+        );
+        assert_eq!(
+            url_as_cached_path(&cache, "http://example.com:8080/folder/app.tar.gz")
+                .to_str()
+                .unwrap(),
+            "http%3A%2F%2Fexample.com%3A8080%2Ffolder"
+        );
+        assert_eq!(
+            url_as_cached_path(&cache, "http://foo:bar@example.com/app.tar.gz")
+                .to_str()
+                .unwrap(),
+            "http%3A%2F%2Fexample.com"
+        );
+        assert_eq!(
+            url_as_cached_path(&cache, "http://foo:bar@example.com/folder/app.tar.gz")
+                .to_str()
+                .unwrap(),
+            "http%3A%2F%2Fexample.com%2Ffolder"
+        );
+    }
+    #[test]
+    #[should_panic]
+    fn test_url_as_cached_path_expects_path() {
+        let cache = Cache::init_with_custom_path_for_test(PathBuf::new());
+        url_as_cached_path(&cache, "http://example.com");
     }
 }

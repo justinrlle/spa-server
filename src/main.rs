@@ -82,8 +82,8 @@ fn main() -> Result<()> {
 
     let app_path = expand_path(&config.server.serve)?;
     let source = source::detect(&app_path);
-    let cache_folder = &cache::cache_dir()?;
-    let folder = source.setup(cache_folder, config.server.base_path.as_deref())?;
+    let cache = cache::Cache::init()?;
+    let folder = source.setup(&cache, config.server.base_path.as_deref())?;
 
     debug!("serving from: {}", folder.display());
 

@@ -1,5 +1,6 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
+use crate::cache;
 use anyhow::Result;
 
 mod archive;
@@ -30,11 +31,11 @@ pub fn detect(app_path: &str) -> Source {
 }
 
 impl<'a> Source<'a> {
-    pub fn setup(&'a self, cache_folder: &Path, base_folder: Option<&str>) -> Result<PathBuf> {
+    pub fn setup(&'a self, cache: &cache::Cache, base_folder: Option<&str>) -> Result<PathBuf> {
         match &self.kind {
             SourceKind::Archive { format } => {
                 info!("serving from archive at {}", self.app_path);
-                let folder = archive::extract(self.app_path, format, cache_folder)?;
+                let folder = archive::extract(self.app_path, format, cache)?;
                 if let Some(base_folder) = base_folder {
                     let mut folder = folder;
                     folder.push(base_folder);
@@ -49,7 +50,7 @@ impl<'a> Source<'a> {
             }
             SourceKind::Http { format } => {
                 info!("serving from archive located at {}", self.app_path);
-                let folder = http::extract(self.app_path, format, cache_folder)?;
+                let folder = http::extract(self.app_path, format, cache)?;
                 if let Some(base_folder) = base_folder {
                     let mut folder = folder;
                     folder.push(base_folder);
