@@ -136,6 +136,10 @@ impl ArchiveFormat {
         }
     }
 
+    pub fn strip_self<'a>(&self, filename: &'a str) -> &'a str {
+        &filename[..filename.len() - self.extension_length]
+    }
+
     pub fn is_tar(&self) -> bool {
         use ArchiveFormatKind::*;
         self.kind == Tar
@@ -154,7 +158,7 @@ impl ArchiveFormat {
     }
 }
 
-fn path_for_extraction(path: &Path, archive: &ArchiveFormat) -> PathBuf {
+pub fn path_for_extraction(path: &Path, archive: &ArchiveFormat) -> PathBuf {
     assert!(
         archive.is_tar(),
         "archive format not supported: {}",
@@ -164,7 +168,7 @@ fn path_for_extraction(path: &Path, archive: &ArchiveFormat) -> PathBuf {
         .file_name()
         .expect("received a path with no file name")
         .to_string_lossy();
-    let head = &head[..head.len() - archive.extension_length];
+    let head = archive.strip_self(&head);
     let parent = path
         .parent()
         .expect("received a path with no parent")
@@ -176,7 +180,7 @@ fn path_for_extraction(path: &Path, archive: &ArchiveFormat) -> PathBuf {
     to_encode_path
 }
 
-pub fn extract_archive_to(path: &str, archive: &ArchiveFormat, extract_path: &Path) -> Result<()> {
+pub fn extract_archive_to(path: &Path, archive: &ArchiveFormat, extract_path: &Path) -> Result<()> {
     assert!(archive.is_tar(), "only tar archives are supported");
     let status = Command::new("tar")
         .arg("xf")
@@ -191,7 +195,7 @@ pub fn extract_archive_to(path: &str, archive: &ArchiveFormat, extract_path: &Pa
     anyhow::ensure!(
         status.success(),
         "tar command failed to run: `tar xf '{}' -C '{}'",
-        path,
+        path.display(),
         extract_path.display()
     );
     Ok(())
@@ -203,13 +207,13 @@ pub fn extract(archive_path: &str, archive: &ArchiveFormat, cache: &Cache) -> Re
         .context("failed to canonicalize path of archive")?;
     let extracted_path = path_for_extraction(&full_archive_path, archive);
     let extracted_path = cache
-        .path_for_resource(
+        .resource(
             CacheKind::Archive,
             extracted_path.to_string_lossy().as_bytes(),
         )
         .context("failed to create cache folder for extraction")?;
     debug!("path for extracted archive: {}", extracted_path.display());
-    extract_archive_to(&archive_path, archive, &extracted_path)
+    extract_archive_to(&Path::new(archive_path), archive, &extracted_path)
         .context("failed to extract archive")?;
     Ok(extracted_path)
 }

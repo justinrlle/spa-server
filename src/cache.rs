@@ -39,7 +39,7 @@ impl Cache {
         Ok(Self { cache_folder })
     }
 
-    pub fn path_for_resource(&self, kind: CacheKind, resource: &[u8]) -> Result<PathBuf> {
+    pub fn resource(&self, kind: CacheKind, resource: &[u8]) -> Result<PathBuf> {
         let path = self.cache_folder.join(kind.as_folder());
         ensure_path_exists(&path)?;
         let path = path.join(to_cached_path(resource));
