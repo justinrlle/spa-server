@@ -1,11 +1,29 @@
-use std::path::PathBuf;
-use std::{env, fs};
+use std::{
+    env, fs, io,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
 use rouille::url::percent_encoding::{percent_encode, USERINFO_ENCODE_SET};
 
+#[derive(Debug)]
 pub struct Cache {
     cache_folder: PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CacheKind {
+    Archive,
+    Http,
+}
+
+impl CacheKind {
+    fn as_folder(&self) -> &'static str {
+        match self {
+            CacheKind::Archive => "archive",
+            CacheKind::Http => "http",
+        }
+    }
 }
 
 impl Cache {
@@ -21,11 +39,16 @@ impl Cache {
         Ok(Self { cache_folder })
     }
 
-    pub fn path_for_resource(&self, resource: &[u8]) -> PathBuf {
-        self.cache_folder.join(to_cached_path(resource))
+    pub fn path_for_resource(&self, kind: CacheKind, resource: &[u8]) -> Result<PathBuf> {
+        let path = self.cache_folder.join(kind.as_folder());
+        ensure_path_exists(&path)?;
+        let path = path.join(to_cached_path(resource));
+        ensure_path_exists(&path)?;
+        Ok(path)
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn init_with_custom_path_for_test(cache_folder: PathBuf) -> Self {
         Self { cache_folder }
     }
@@ -33,6 +56,31 @@ impl Cache {
 
 fn to_cached_path(path: &[u8]) -> String {
     percent_encode(path, USERINFO_ENCODE_SET).to_string()
+}
+
+fn ensure_path_exists(path: &Path) -> Result<()> {
+    match fs::metadata(path) {
+        Ok(metadata) => {
+            if metadata.is_dir() {
+                fs::remove_dir_all(path).with_context(|| {
+                    format!("failed to remove old directory: {}", path.display())
+                })?;
+            } else if metadata.is_file() {
+                fs::remove_file(path).with_context(|| {
+                    format!("failed to remove old directory: {}", path.display())
+                })?;
+            }
+        }
+        Err(e) => {
+            anyhow::ensure!(
+                e.kind() == io::ErrorKind::NotFound,
+                "failed to get metadata for path: {}",
+                path.display()
+            );
+        }
+    }
+    fs::create_dir(path).with_context(|| format!("failed to create folder: {}", path.display()))?;
+    Ok(())
 }
 
 #[cfg(test)]

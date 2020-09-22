@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use super::archive::{self, ArchiveFormat};
 
-use crate::cache::Cache;
+use crate::cache::{Cache, CacheKind};
 use anyhow::Result;
 use rouille::url;
 
@@ -26,7 +26,8 @@ pub fn extract(app_path: &str, format: &HttpArchive, cache: &Cache) -> Result<Pa
         "got {:?} archive, only tar archives are supported",
         format.format.kind()
     );
-    let _cache_path = url_as_cached_path(cache, app_path);
+    let cache_path = url_as_cached_path(app_path);
+    let _cache_path = cache.path_for_resource(CacheKind::Http, cache_path.as_bytes())?;
 
     todo!("download and extract archive")
 }
@@ -41,14 +42,14 @@ fn private_url(url: &str) -> url::Url {
     .expect("failed to create private url")
 }
 
-fn url_as_cached_path(cache: &Cache, app_path: &str) -> PathBuf {
+fn url_as_cached_path(app_path: &str) -> String {
     let private_url = private_url(app_path);
     assert_ne!(private_url.path(), "/", "url must have a path");
     let last_slash_idx = private_url
         .as_str()
         .rfind('/')
         .expect("all urls have a '/'");
-    cache.path_for_resource(private_url.as_str()[0..last_slash_idx].as_bytes())
+    private_url.as_str()[0..last_slash_idx].to_owned()
 }
 
 #[cfg(test)]
@@ -81,48 +82,34 @@ mod tests {
 
     #[test]
     fn test_url_as_cached_path() {
-        let cache = Cache::init_with_custom_path_for_test(PathBuf::new());
         assert_eq!(
-            url_as_cached_path(&cache, "http://example.com/app.tar.gz")
-                .to_str()
-                .unwrap(),
-            "http%3A%2F%2Fexample.com"
+            url_as_cached_path("http://example.com/app.tar.gz"),
+            "http://example.com"
         );
         assert_eq!(
-            url_as_cached_path(&cache, "http://example.com/folder/app.tar.gz")
-                .to_str()
-                .unwrap(),
-            "http%3A%2F%2Fexample.com%2Ffolder"
+            url_as_cached_path("http://example.com/folder/app.tar.gz"),
+            "http://example.com/folder"
         );
         assert_eq!(
-            url_as_cached_path(&cache, "http://example.com:8080/app.tar.gz")
-                .to_str()
-                .unwrap(),
-            "http%3A%2F%2Fexample.com%3A8080"
+            url_as_cached_path("http://example.com:8080/app.tar.gz"),
+            "http://example.com:8080"
         );
         assert_eq!(
-            url_as_cached_path(&cache, "http://example.com:8080/folder/app.tar.gz")
-                .to_str()
-                .unwrap(),
-            "http%3A%2F%2Fexample.com%3A8080%2Ffolder"
+            url_as_cached_path("http://example.com:8080/folder/app.tar.gz"),
+            "http://example.com:8080/folder"
         );
         assert_eq!(
-            url_as_cached_path(&cache, "http://foo:bar@example.com/app.tar.gz")
-                .to_str()
-                .unwrap(),
-            "http%3A%2F%2Fexample.com"
+            url_as_cached_path("http://foo:bar@example.com/app.tar.gz"),
+            "http://example.com"
         );
         assert_eq!(
-            url_as_cached_path(&cache, "http://foo:bar@example.com/folder/app.tar.gz")
-                .to_str()
-                .unwrap(),
-            "http%3A%2F%2Fexample.com%2Ffolder"
+            url_as_cached_path("http://foo:bar@example.com/folder/app.tar.gz"),
+            "http://example.com/folder"
         );
     }
     #[test]
     #[should_panic]
     fn test_url_as_cached_path_expects_path() {
-        let cache = Cache::init_with_custom_path_for_test(PathBuf::new());
-        url_as_cached_path(&cache, "http://example.com");
+        url_as_cached_path("http://example.com");
     }
 }
