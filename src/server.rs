@@ -13,7 +13,7 @@ pub fn log_success(request: &rouille::Request, _response: &rouille::Response, du
     let method = request.method();
     let path = request.raw_url().split('?').next().unwrap();
     let time = duration.as_millis();
-    info!(
+    debug!(
         "{method} {path} - {time}ms",
         method = method,
         path = path,

@@ -194,7 +194,7 @@ pub fn extract_archive_to(path: &Path, archive: &ArchiveFormat, extract_path: &P
         .context("failed to run tar command, is tar installed?")?;
     anyhow::ensure!(
         status.success(),
-        "tar command failed to run: `tar xf '{}' -C '{}'",
+        "tar command failed to run: `tar xf '{}' -C '{}'`",
         path.display(),
         extract_path.display()
     );
@@ -209,7 +209,7 @@ pub fn extract(archive_path: &str, archive: &ArchiveFormat, cache: &Cache) -> Re
     let extracted_path = cache
         .resource(
             CacheKind::Archive,
-            extracted_path.to_string_lossy().as_bytes(),
+            &[extracted_path.to_string_lossy().as_bytes()],
         )
         .context("failed to create cache folder for extraction")?;
     debug!("path for extracted archive: {}", extracted_path.display());
@@ -333,4 +333,6 @@ mod test {
             Path::new(r"dist\front\out\foo")
         );
     }
+
+    // TODO: more tests
 }

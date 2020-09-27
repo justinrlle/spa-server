@@ -18,7 +18,7 @@ Assuming an angular v8 app called `project-name`, and built with `ng build`.
 In one line:
 ```shell script
 $ spa-server -s dist/project-name
-# will serve on http://localhost:4242
+# will serve the folder dist/project-name on http://localhost:4242
 ```
 
 ### Using a config file
@@ -46,14 +46,14 @@ First, [Rust](https://www.rust-lang.org) must be installed. You can then install
 $ cargo install --force --git https://github.com/justinrlle/spa-server
 ```
 
+### Install from crates.io
+
+> TODO
+
 ## TODO (and current caveats)
 
 ### TODO soon
 - serve from url
-- figure out how to use secrets in application path
-  - plain old environnement variables?
-  - `dotenv` file loading?
-  -  use of `secret-tool`, `gnome-keychain`, Keychain Access on macOS?
 
 ### long term TODOs
 - other protocols
@@ -65,5 +65,8 @@ $ cargo install --force --git https://github.com/justinrlle/spa-server
 - better testing for archives
 - feature parity with [webpack dev-server proxy][devserverproxy]
 - cli option to define simple proxies (possible syntax: `spa-server --forward /api=http://localhost:8080`)
+- figure out how to use secrets in application path
+  - stay with plain old environnement variables and `dotenv` file loading?
+  - use of `secret-tool`, `gnome-keychain`, Keychain Access on macOS?
 
 [devserverproxy]: https://webpack.js.org/configuration/dev-server/#devserverproxy

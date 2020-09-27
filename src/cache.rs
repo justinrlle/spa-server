@@ -39,11 +39,14 @@ impl Cache {
         Ok(Self { cache_folder })
     }
 
-    pub fn resource(&self, kind: CacheKind, resource: &[u8]) -> Result<PathBuf> {
+    pub fn resource(&self, kind: CacheKind, parts: &[&[u8]]) -> Result<PathBuf> {
         let path = self.cache_folder.join(kind.as_folder());
         ensure_path_exists(&path)?;
-        let path = path.join(to_cached_path(resource));
-        ensure_path_exists(&path)?;
+        let mut path = path;
+        for part in parts {
+            path = path.join(to_cached_path(part));
+            ensure_path_exists(&path)?
+        }
         Ok(path)
     }
 

@@ -41,7 +41,7 @@ impl ProxyConfig {
         request: &rouille::Request,
         http_client: &HttpClient,
     ) -> Result<rouille::Response> {
-        info!("proxying request at {} to {}", request.url(), self.target);
+        debug!("proxying request at {} to {}", request.url(), self.target);
         let req = self.rouille_to_http(request);
         let res = http_client.send(req);
         if let Err(e) = &res {

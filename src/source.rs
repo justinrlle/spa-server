@@ -20,10 +20,10 @@ enum SourceKind {
 }
 
 pub fn detect(app_path: &str) -> Source {
-    let kind = if let Some(format) = archive::detect(app_path) {
-        SourceKind::Archive { format }
-    } else if let Some(format) = http::detect(app_path) {
+    let kind = if let Some(format) = http::detect(app_path) {
         SourceKind::Http { format }
+    } else if let Some(format) = archive::detect(app_path) {
+        SourceKind::Archive { format }
     } else {
         SourceKind::Folder
     };
