@@ -47,6 +47,9 @@ impl Cache {
             path = path.join(to_cached_path(part));
             ensure_path_exists(&path)?
         }
+        fs::remove_dir_all(&path)
+            .with_context(|| format!("failed to remove old directory: {}", path.display()))?;
+        ensure_path_exists(&path)?;
         Ok(path)
     }
 
@@ -65,9 +68,7 @@ fn ensure_path_exists(path: &Path) -> Result<()> {
     match fs::metadata(path) {
         Ok(metadata) => {
             if metadata.is_dir() {
-                fs::remove_dir_all(path).with_context(|| {
-                    format!("failed to remove old directory: {}", path.display())
-                })?;
+                return Ok(());
             } else if metadata.is_file() {
                 fs::remove_file(path).with_context(|| {
                     format!("failed to remove old directory: {}", path.display())
